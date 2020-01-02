@@ -137,7 +137,7 @@ async function wasm_pack(cx, dir, source, id, options) {
 
     // TODO use the [name] somehow
     // TODO generate random name ?
-    const wasm_name = name + ".wasm";
+    const wasm_name = $path.join(options.outdir, name + ".wasm");
 
     cx.emitFile({
         type: "asset",
@@ -148,7 +148,7 @@ async function wasm_pack(cx, dir, source, id, options) {
     // TODO better way to generate the path
     const import_path = JSON.stringify("./" + $path.relative(dir, $path.join(out_dir, "index.js")));
 
-    const import_wasm = (options.importHook ? options.importHook(wasm_name) : JSON.stringify(wasm_name));
+    const import_wasm = options.importHook(wasm_name);
 
     const is_entry = cx.getModuleInfo(id).isEntry;
 
@@ -213,6 +213,14 @@ module.exports = function rust(options = {}) {
         options.watchPatterns = [
             "src/**"
         ];
+    }
+
+    if (options.importHook == null) {
+        options.importHook = function (path) { return JSON.stringify(path); };
+    }
+
+    if (options.outdir == null) {
+        options.outdir = "";
     }
 
     return {
