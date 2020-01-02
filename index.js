@@ -137,7 +137,7 @@ async function wasm_pack(cx, dir, source, id, options) {
 
     // TODO use the [name] somehow
     // TODO generate random name ?
-    const wasm_name = $path.join(options.outdir, name + ".wasm");
+    const wasm_name = $path.posix.join(options.outdir, name + ".wasm");
 
     cx.emitFile({
         type: "asset",
@@ -146,7 +146,7 @@ async function wasm_pack(cx, dir, source, id, options) {
     });
 
     // TODO better way to generate the path
-    const import_path = JSON.stringify("./" + $path.relative(dir, $path.join(out_dir, "index.js")));
+    const import_path = JSON.stringify($path.join(".", $path.relative(dir, $path.join(out_dir, "index.js"))));
 
     const import_wasm = options.importHook(wasm_name);
 
