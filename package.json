@@ -1,0 +1,30 @@
+{
+  "author": "Pauan <pauanyu+github@pm.me>",
+  "name": "rollup-plugin-rust",
+  "description": "Rollup plugin for bundling or importing Rust crates",
+  "version": "1.0.0",
+  "license": "MIT",
+  "repository": "github:Pauan/rollup-plugin-rust",
+  "homepage": "https://github.com/Pauan/rollup-plugin-rust#readme",
+  "bugs": "https://github.com/Pauan/rollup-plugin-rust/issues",
+  "keywords": [
+    "rollup-plugin",
+    "rust-wasm",
+    "wasm",
+    "rust",
+    "rollup",
+    "plugin",
+    "webassembly",
+    "wasm-pack",
+    "wasm-bindgen"
+  ],
+  "dependencies": {
+    "rollup-pluginutils": "^2.8.2",
+    "toml": "^3.0.0",
+    "rimraf": "^3.0.0",
+    "glob": "^7.1.6"
+  },
+  "peerDependencies": {
+  	"wasm-pack": "*"
+  }
+}
