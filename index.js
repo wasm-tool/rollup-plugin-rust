@@ -124,13 +124,23 @@ async function wasm_pack(cx, dir, source, id, options) {
     try {
         // TODO what if it tries to build the same crate multiple times ?
         await lock(async function () {
+            // TODO pretty hacky
+            const command = (process.platform === "win32" ? "wasm-pack.cmd" : "wasm-pack");
+
             // TODO make sure to use the npm installed binary for wasm-pack
-            await wait($child.spawn("wasm-pack", args, { cwd: dir, stdio: "inherit" }));
+            await wait($child.spawn(command, args, { cwd: dir, stdio: "inherit" }));
         });
 
-    // TODO print the full error in verbose mode
     } catch (e) {
-        throw new Error("");
+        if (e.code === "ENOENT") {
+            throw new Error("Could not find wasm-pack, make sure it is installed");
+
+        } else if (options.verbose) {
+            throw e;
+
+        } else {
+            throw new Error("");
+        }
     }
 
     const wasm = await read($path.join(out_dir, "index_bg.wasm"));
@@ -219,8 +229,13 @@ module.exports = function rust(options = {}) {
         options.importHook = function (path) { return JSON.stringify(path); };
     }
 
+    // TODO use output.assetFileNames
     if (options.outdir == null) {
         options.outdir = "";
+    }
+
+    if (options.verbose == null) {
+        options.verbose = false;
     }
 
     return {
