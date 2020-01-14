@@ -124,10 +124,9 @@ async function wasm_pack(cx, dir, source, id, options) {
     try {
         // TODO what if it tries to build the same crate multiple times ?
         await lock(async function () {
-            // TODO pretty hacky
+            // TODO pretty hacky, but needed to make it work on Windows
             const command = (process.platform === "win32" ? "wasm-pack.cmd" : "wasm-pack");
 
-            // TODO make sure to use the npm installed binary for wasm-pack
             await wait($child.spawn(command, args, { cwd: dir, stdio: "inherit" }));
         });
 
