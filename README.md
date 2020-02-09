@@ -38,7 +38,7 @@ You can import as many different `Cargo.toml` files as you want, each one will b
 
 When compiling multiple crates it is recommended to use a single shared [workspace](https://doc.rust-lang.org/cargo/reference/manifest.html#the-workspace-section) to improve compile times.
 
-#### Importing `Cargo.toml` within `.js`
+### Importing `Cargo.toml` within `.js`
 
 It is also possible to import a `Cargo.toml` file inside of a `.js` file, like this:
 
@@ -89,7 +89,7 @@ rust({
 
 The defaults are good for almost all use cases, so you generally shouldn't need to change them.
 
-#### Chrome / Firefox extensions
+### Chrome / Firefox extensions
 
 If you are creating a Chrome / Firefox extension you may need to use `importHook` to customize the loading behavior, like this:
 
