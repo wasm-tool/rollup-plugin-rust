@@ -1,19 +1,19 @@
 # rust-plugin-rust
 
-> Rollup plugin for bundling or importing Rust crates
+> Rollup plugin for bundling and importing Rust crates
 
 ## Installation
 
-First, make sure that [rustup](https://rustup.rs/) is installed. Then run this:
+First, make sure that [rustup](https://rustup.rs/) is installed.
+
+If you are on Windows, then you also need to install the [Visual Studio build tools](https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=BuildTools&rel=16) (make sure to enable the "C++ build tools" option).
+
+Lastly, run this:
 
 ```sh
 yarn add --dev wasm-pack
 yarn add --dev github:Pauan/rollup-plugin-rust
 ```
-
-That's it!
-
-### `wasm-pack`
 
 This plugin internally uses [`wasm-pack`](https://rustwasm.github.io/wasm-pack/) and [`wasm-bindgen`](https://rustwasm.github.io/docs/wasm-bindgen/), which is why you must install the `wasm-pack` npm package in order for it to work.
 
@@ -38,7 +38,7 @@ You can import as many different `Cargo.toml` files as you want, each one will b
 
 When compiling multiple crates it is recommended to use a single shared [workspace](https://doc.rust-lang.org/cargo/reference/manifest.html#the-workspace-section) to improve compile times.
 
-### Importing `Cargo.toml` within `.js`
+#### Importing `Cargo.toml` within `.js`
 
 It is also possible to import a `Cargo.toml` file inside of a `.js` file, like this:
 
@@ -54,7 +54,7 @@ async function loadWasm() {
 
 This will load the Rust `.js` glue code synchronously, but the Rust `.wasm` code will be loaded asynchronously (which is why the `wasm` function returns a `Promise`).
 
-If you want to load *everything* asynchronously, you can use dynamic `import`, like this:
+If you instead want to load *everything* asynchronously, you can use dynamic `import`, like this:
 
 ```js
 async function loadWasm() {
@@ -89,7 +89,7 @@ rust({
 
 The defaults are good for almost all use cases, so you generally shouldn't need to change them.
 
-### Chrome / Firefox extensions
+#### Chrome / Firefox extensions
 
 If you are creating a Chrome / Firefox extension you may need to use `importHook` to customize the loading behavior, like this:
 
