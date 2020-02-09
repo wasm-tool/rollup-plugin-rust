@@ -25,6 +25,6 @@
     "glob": "^7.1.6"
   },
   "peerDependencies": {
-  	"wasm-pack": "*"
+    "wasm-pack": "^0.9.0"
   }
 }

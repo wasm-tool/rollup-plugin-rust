@@ -112,7 +112,7 @@ async function wasm_pack(cx, dir, source, id, options) {
 
     const args = [
         // TODO adjust based on Webpack's error report level
-        //"--log-level", "error",
+        "--log-level", "error",
         "build",
         "--out-dir", out_dir,
         "--out-name", "index",
@@ -171,13 +171,15 @@ async function wasm_pack(cx, dir, source, id, options) {
             map: { mappings: '' }
         };
 
-    // TODO this is probably wrong
     } else {
         return {
             code: `
                 import init from ${import_path};
 
-                export default init(${import_wasm});
+                export default async () => {
+                    await init(${import_wasm});
+                    return init;
+                };
             `,
             map: { mappings: '' }
         };

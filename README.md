@@ -4,10 +4,14 @@
 
 ## Installation
 
+First, make sure that [rustup](https://rustup.rs/) is installed. Then run this:
+
 ```sh
 yarn add --dev wasm-pack
 yarn add --dev github:Pauan/rollup-plugin-rust
 ```
+
+That's it!
 
 ### `wasm-pack`
 
@@ -15,7 +19,7 @@ This plugin internally uses [`wasm-pack`](https://rustwasm.github.io/wasm-pack/)
 
 ## Usage
 
-Add the plugin in your `rollup.config.js` and import a `Cargo.toml` file:
+Add the plugin in your `rollup.config.js`, and now you can use `Cargo.toml` files as entries:
 
 ```js
 import rust from "rollup-plugin-rust";
@@ -34,6 +38,33 @@ You can import as many different `Cargo.toml` files as you want, each one will b
 
 When compiling multiple crates it is recommended to use a single shared [workspace](https://doc.rust-lang.org/cargo/reference/manifest.html#the-workspace-section) to improve compile times.
 
+### Importing `Cargo.toml` within `.js`
+
+It is also possible to import a `Cargo.toml` file inside of a `.js` file, like this:
+
+```js
+import wasm from "./path/to/Cargo.toml";
+
+async function loadWasm() {
+    const exports = await wasm();
+
+    // Use functions which were exported from Rust...
+}
+```
+
+This will load the Rust `.js` glue code synchronously, but the Rust `.wasm` code will be loaded asynchronously (which is why the `wasm` function returns a `Promise`).
+
+If you want to load *everything* asynchronously, you can use dynamic `import`, like this:
+
+```js
+async function loadWasm() {
+    const wasm = await import("./path/to/Cargo.toml");
+    const exports = await wasm.default();
+
+    // Use functions which were exported from Rust...
+}
+```
+
 ## Options
 
 These are the default options:
@@ -47,13 +78,16 @@ rust({
     // Directory (relative to output.dir) where the .wasm files should be placed.
     outdir: "",
 
-    // Which files it should watch in watch mode. Supports all of the glob syntax.
+    // Which files it should watch in watch mode. This is relative to the crate directory.
+    // Supports all of the glob syntax.
     watchPatterns: ["src/**"],
 
-    // Lets you customize the behavior for loading the .wasm file, this is for advanced users only!
+    // Allows you to customize the behavior for loading the .wasm file, this is for advanced users only!
     importHook: function (path) { return JSON.stringify(path); },
 })
 ```
+
+The defaults are good for almost all use cases, so you generally shouldn't need to change them.
 
 ### Chrome / Firefox extensions
 
