@@ -111,8 +111,7 @@ async function wasm_pack(cx, dir, source, id, options) {
     await rm(out_dir);
 
     const args = [
-        // TODO adjust based on Webpack's error report level
-        "--log-level", "error",
+        "--log-level", (options.verbose ? "info" : "error"),
         "build",
         "--out-dir", out_dir,
         "--out-name", "index",
@@ -189,7 +188,7 @@ async function wasm_pack(cx, dir, source, id, options) {
 
 async function watch_files(cx, dir, options) {
     if (options.watch) {
-        const matches = await await Promise.all(options.watchPatterns.map(function (pattern) {
+        const matches = await Promise.all(options.watchPatterns.map(function (pattern) {
             return glob(pattern, dir);
         }));
 
