@@ -138,7 +138,7 @@ async function wasm_pack(cx, dir, source, id, options) {
             throw e;
 
         } else {
-            throw new Error("");
+            throw new Error("Rust compilation failed");
         }
     }
 
@@ -174,11 +174,11 @@ async function wasm_pack(cx, dir, source, id, options) {
     } else {
         return {
             code: `
-                import init from ${import_path};
+                import * as exports from ${import_path};
 
                 export default async () => {
-                    await init(${import_wasm});
-                    return init;
+                    await exports.default(${import_wasm});
+                    return exports;
                 };
             `,
             map: { mappings: '' }
