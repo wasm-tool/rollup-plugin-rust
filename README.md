@@ -1,6 +1,6 @@
-# rust-plugin-rust
+# rollup-plugin-rust
 
-> Rollup plugin for bundling and importing Rust crates
+Rollup plugin for bundling and importing Rust crates.
 
 ## Installation
 
@@ -12,7 +12,7 @@ Lastly, run this:
 
 ```sh
 yarn add --dev wasm-pack
-yarn add --dev github:Pauan/rollup-plugin-rust
+yarn add --dev @wasm-tool/rollup-plugin-rust
 ```
 
 This plugin internally uses [`wasm-pack`](https://rustwasm.github.io/wasm-pack/) and [`wasm-bindgen`](https://rustwasm.github.io/docs/wasm-bindgen/), which is why you must install the `wasm-pack` npm package in order for it to work.
