@@ -80,6 +80,9 @@ rust({
     // In watch mode this defaults to true.
     debug: false,
 
+    // Whether to display extra compilation information in the console.
+    verbose: false,
+
     // Directory (relative to output.dir) where the .wasm files will be placed.
     outDir: "",
 
