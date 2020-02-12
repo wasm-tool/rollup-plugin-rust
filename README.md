@@ -80,7 +80,7 @@ rust({
     // In watch mode this defaults to true.
     debug: false,
 
-    // Directory (relative to output.dir) where the .wasm files should be placed.
+    // Directory (relative to output.dir) where the .wasm files will be placed.
     outDir: "",
 
     // Server directory where the .wasm files will be loaded from.
@@ -96,7 +96,7 @@ rust({
 })
 ```
 
-The defaults are good for almost all use cases, so you generally shouldn't need to change them.
+The defaults are good for most use cases, so you generally shouldn't need to change them.
 
 ### Chrome / Firefox extensions
 
