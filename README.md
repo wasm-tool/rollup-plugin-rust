@@ -2,6 +2,8 @@
 
 Rollup plugin for bundling and importing Rust crates.
 
+This plugin internally uses [`wasm-pack`](https://rustwasm.github.io/wasm-pack/) and [`wasm-bindgen`](https://rustwasm.github.io/docs/wasm-bindgen/).
+
 ## Installation
 
 First, make sure that [rustup](https://rustup.rs/) is installed.
@@ -11,15 +13,18 @@ If you are on Windows, then you also need to install the [Visual Studio build to
 Lastly, run this:
 
 ```sh
-yarn add --dev wasm-pack
 yarn add --dev @wasm-tool/rollup-plugin-rust
 ```
 
-This plugin internally uses [`wasm-pack`](https://rustwasm.github.io/wasm-pack/) and [`wasm-bindgen`](https://rustwasm.github.io/docs/wasm-bindgen/), which is why you must install the `wasm-pack` npm package in order for it to work.
+Or if you're using npm you can use this instead:
+
+```sh
+npm install --save-dev @wasm-tool/rollup-plugin-rust
+```
 
 ## Usage
 
-Add the plugin in your `rollup.config.js`, and now you can use `Cargo.toml` files as entries:
+Add the plugin to your `rollup.config.js`, and now you can use `Cargo.toml` files as entries:
 
 ```js
 import rust from "rollup-plugin-rust";
@@ -101,4 +106,4 @@ rust({
 })
 ```
 
-This is necessary because extension files are put into a separate URL namespace, so you must use `chrome.runtime.getURL` to find the correct URL.
+This is necessary because extension files are put into a separate URL namespace, so you must use `chrome.runtime.getURL` to get the correct URL.
