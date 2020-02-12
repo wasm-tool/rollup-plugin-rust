@@ -27,7 +27,7 @@ npm install --save-dev @wasm-tool/rollup-plugin-rust
 Add the plugin to your `rollup.config.js`, and now you can use `Cargo.toml` files as entries:
 
 ```js
-import rust from "rollup-plugin-rust";
+import rust from "@wasm-tool/rollup-plugin-rust";
 
 export default {
     input: {
@@ -81,7 +81,11 @@ rust({
     debug: false,
 
     // Directory (relative to output.dir) where the .wasm files should be placed.
-    outdir: "",
+    outDir: "",
+
+    // Server directory where the .wasm files will be loaded from.
+    // This is prepended to the URL, so you should put a / at the end of the directory, like "/foo/".
+    serverPath: "",
 
     // Which files it should watch in watch mode. This is relative to the crate directory.
     // Supports all of the glob syntax.

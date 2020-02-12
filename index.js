@@ -7,6 +7,10 @@ const $rimraf = require("rimraf");
 const { createFilter } = require("rollup-pluginutils");
 
 
+function posixPath(path) {
+    return path.replace(/\\/g, $path.posix.sep);
+}
+
 function glob(pattern, cwd) {
     return new Promise(function (resolve, reject) {
         $glob(pattern, {
@@ -145,7 +149,7 @@ async function wasm_pack(cx, dir, source, id, options) {
 
     // TODO use the [name] somehow
     // TODO generate random name ?
-    const wasm_name = $path.posix.join(options.outdir, name + ".wasm");
+    const wasm_name = $path.posix.join(options.outDir, name + ".wasm");
 
     cx.emitFile({
         type: "asset",
@@ -154,9 +158,9 @@ async function wasm_pack(cx, dir, source, id, options) {
     });
 
     // TODO better way to generate the path
-    const import_path = JSON.stringify($path.join(".", $path.relative(dir, $path.join(out_dir, "index.js"))));
+    const import_path = JSON.stringify("./" + posixPath($path.relative(dir, $path.join(out_dir, "index.js"))));
 
-    const import_wasm = options.importHook(wasm_name);
+    const import_wasm = options.importHook(options.serverPath + wasm_name);
 
     const is_entry = cx.getModuleInfo(id).isEntry;
 
@@ -230,8 +234,12 @@ module.exports = function rust(options = {}) {
     }
 
     // TODO use output.assetFileNames
-    if (options.outdir == null) {
-        options.outdir = "";
+    if (options.outDir == null) {
+        options.outDir = "";
+    }
+
+    if (options.serverPath == null) {
+        options.serverPath = "";
     }
 
     if (options.verbose == null) {

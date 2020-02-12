@@ -1,0 +1,14 @@
+{
+  "private": true,
+  "name": "example",
+  "author": "You <you@example.com>",
+  "version": "0.1.0",
+  "scripts": {
+    "build": "rimraf dist/js && rollup --config"
+  },
+  "devDependencies": {
+    "@wasm-tool/rollup-plugin-rust": "^1.0.0",
+    "rollup": "^1.31.0",
+    "rimraf": "^3.0.2"
+  }
+}
