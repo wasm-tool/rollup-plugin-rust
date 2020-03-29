@@ -120,7 +120,6 @@ async function wasm_pack(cx, dir, source, id, options) {
         "--out-dir", out_dir,
         "--out-name", "index",
         "--target", "web",
-        "--no-typescript",
         (options.debug ? "--dev" : "--release")
     ];
 

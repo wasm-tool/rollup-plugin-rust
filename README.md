@@ -83,12 +83,12 @@ rust({
     // Whether to display extra compilation information in the console.
     verbose: false,
 
+    // Directory on your server where the .wasm files will be loaded from.
+    // This is prepended to the URL, so you should put a / at the end of the directory, e.g. "/foo/".
+    serverPath: "",
+
     // Directory (relative to output.dir) where the .wasm files will be placed.
     outDir: "",
-
-    // Server directory where the .wasm files will be loaded from.
-    // This is prepended to the URL, so you should put a / at the end of the directory, like "/foo/".
-    serverPath: "",
 
     // Which files it should watch in watch mode. This is relative to the crate directory.
     // Supports all of the glob syntax.
