@@ -134,7 +134,7 @@ async function wasm_pack(cx, dir, source, id, options) {
 
     } catch (e) {
         if (e.code === "ENOENT") {
-            throw new Error("Could not find wasm-pack, make sure it is installed");
+            throw new Error("Could not find wasm-pack, install it with `yarn add --dev wasm-pack` or `npm install --save-dev wasm-pack`");
 
         } else if (options.verbose) {
             throw e;
