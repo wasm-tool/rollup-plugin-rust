@@ -90,6 +90,9 @@ rust({
     // Directory (relative to output.dir) where the .wasm files will be placed.
     outDir: "",
 
+    // Extra arguments to pass to `cargo build`.
+    cargoArgs: [],
+
     // Which files it should watch in watch mode. This is relative to the crate directory.
     // Supports all of the glob syntax.
     watchPatterns: ["src/**"],

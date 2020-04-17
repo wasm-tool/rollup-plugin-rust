@@ -120,8 +120,9 @@ async function wasm_pack(cx, dir, source, id, options) {
         "--out-dir", out_dir,
         "--out-name", "index",
         "--target", "web",
-        (options.debug ? "--dev" : "--release")
-    ];
+        (options.debug ? "--dev" : "--release"),
+        "--",
+    ].concat(options.cargoArgs);
 
     try {
         // TODO what if it tries to build the same crate multiple times ?
@@ -239,6 +240,10 @@ module.exports = function rust(options = {}) {
 
     if (options.serverPath == null) {
         options.serverPath = "";
+    }
+
+    if (options.cargoArgs == null) {
+        options.cargoArgs = [];
     }
 
     if (options.verbose == null) {
