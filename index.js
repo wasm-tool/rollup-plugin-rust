@@ -160,7 +160,7 @@ async function wasm_pack(cx, dir, source, id, options) {
     // TODO better way to generate the path
     const import_path = JSON.stringify("./" + posixPath($path.relative(dir, $path.join(out_dir, "index.js"))));
 
-    const import_wasm = options.importHook(options.serverPath + wasm_name);
+    const import_wasm = options.importHook(options.serverPath + wasm_name, wasm);
 
     const is_entry = cx.getModuleInfo(id).isEntry;
 
@@ -230,7 +230,7 @@ module.exports = function rust(options = {}) {
     }
 
     if (options.importHook == null) {
-        options.importHook = function (path) { return JSON.stringify(path); };
+        options.importHook = function (path, _buffer) { return JSON.stringify(path); };
     }
 
     // TODO use output.assetFileNames

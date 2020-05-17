@@ -98,7 +98,7 @@ rust({
     watchPatterns: ["src/**"],
 
     // Allows you to customize the behavior for loading the .wasm file, this is for advanced users only!
-    importHook: function (path) { return JSON.stringify(path); },
+    importHook: function (path, buffer) { return JSON.stringify(path); },
 })
 ```
 
