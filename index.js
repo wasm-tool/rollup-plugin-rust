@@ -55,6 +55,22 @@ function read(path) {
     });
 }
 
+function exec(cmd, options) {
+    return new Promise((resolve, reject) => {
+        $child.exec(cmd, options, (err, stdout, stderr) => {
+            if (err) {
+                reject(err);
+
+            } else if (stderr.length > 0) {
+                reject(new Error(stderr));
+
+            } else {
+                resolve(stdout);
+            }
+        });
+    });
+}
+
 function wait(p) {
     return new Promise((resolve, reject) => {
         p.on("close", (code) => {
@@ -104,13 +120,23 @@ async function lock(f) {
 }
 
 
+async function get_target_dir(dir) {
+    return "target";
+
+    // TODO make this faster somehow
+    //const metadata = await exec("cargo metadata --no-deps --format-version 1", { cwd: dir });
+    //return JSON.parse(metadata).target_directory;
+}
+
+
 async function wasm_pack(cx, dir, source, id, options) {
+    const target_dir = await get_target_dir(dir);
+
     const toml = $toml.parse(source);
 
     const name = toml.package.name;
 
-    // TODO use some logic to find the target dir
-    const out_dir = $path.resolve($path.join("target", "wasm-pack", name));
+    const out_dir = $path.resolve($path.join(target_dir, "wasm-pack", name));
 
     await rm(out_dir);
 
@@ -124,12 +150,13 @@ async function wasm_pack(cx, dir, source, id, options) {
         "--",
     ].concat(options.cargoArgs);
 
+    // TODO pretty hacky, but needed to make it work on Windows
+    const command = (process.platform === "win32" ? "wasm-pack.cmd" : "wasm-pack");
+
     try {
         // TODO what if it tries to build the same crate multiple times ?
+        // TODO maybe it can run `cargo fetch` without locking ?
         await lock(async function () {
-            // TODO pretty hacky, but needed to make it work on Windows
-            const command = (process.platform === "win32" ? "wasm-pack.cmd" : "wasm-pack");
-
             await wait($child.spawn(command, args, { cwd: dir, stdio: "inherit" }));
         });
 
