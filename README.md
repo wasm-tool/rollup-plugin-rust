@@ -93,6 +93,15 @@ rust({
     // Extra arguments to pass to `cargo build`.
     cargoArgs: [],
 
+    // Whether to inline the `.wasm` file into the `.js` file.
+    //
+    // This is slower and it increases the file size by ~33%,
+    // but it does not require a separate `.wasm` file.
+    //
+    // If this is `true` then `serverPath`, `outDir`, and
+    // `importHook` will be ignored.
+    inlineWasm: false,
+
     // Which files it should watch in watch mode. This is relative to the crate directory.
     // Supports all of the glob syntax.
     watchPatterns: ["src/**"],

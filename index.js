@@ -172,47 +172,112 @@ async function wasm_pack(cx, dir, source, id, options) {
         }
     }
 
-    const wasm = await read($path.join(out_dir, "index_bg.wasm"));
-
-    // TODO use the [name] somehow
-    // TODO generate random name ?
-    const wasm_name = $path.posix.join(options.outDir, name + ".wasm");
-
-    cx.emitFile({
-        type: "asset",
-        source: wasm,
-        fileName: wasm_name
-    });
-
     // TODO better way to generate the path
     const import_path = JSON.stringify("./" + posixPath($path.relative(dir, $path.join(out_dir, "index.js"))));
 
-    const import_wasm = options.importHook(options.serverPath + wasm_name);
+    const wasm = await read($path.join(out_dir, "index_bg.wasm"));
 
     const is_entry = cx.getModuleInfo(id).isEntry;
 
-    if (is_entry) {
-        return {
-            code: `
-                import init from ${import_path};
+    if (options.inlineWasm) {
+        const base64_decode = `
+            const base64codes = [62,0,0,0,63,52,53,54,55,56,57,58,59,60,61,0,0,0,0,0,0,0,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,0,0,0,0,0,0,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51];
 
-                init(${import_wasm}).catch(console.error);
-            `,
-            map: { mappings: '' }
-        };
+            function getBase64Code(charCode) {
+                return base64codes[charCode - 43];
+            }
+
+            function base64_decode(str) {
+                let missingOctets = str.endsWith("==") ? 2 : str.endsWith("=") ? 1 : 0;
+                let n = str.length;
+                let result = new Uint8Array(3 * (n / 4));
+                let buffer;
+
+                for (let i = 0, j = 0; i < n; i += 4, j += 3) {
+                    buffer =
+                        getBase64Code(str.charCodeAt(i)) << 18 |
+                        getBase64Code(str.charCodeAt(i + 1)) << 12 |
+                        getBase64Code(str.charCodeAt(i + 2)) << 6 |
+                        getBase64Code(str.charCodeAt(i + 3));
+                    result[j] = buffer >> 16;
+                    result[j + 1] = (buffer >> 8) & 0xFF;
+                    result[j + 2] = buffer & 0xFF;
+                }
+
+                return result.subarray(0, result.length - missingOctets);
+            }
+        `;
+
+        const wasm_string = JSON.stringify(wasm.toString("base64"));
+
+        if (is_entry) {
+            return {
+                code: `
+                    import init from ${import_path};
+
+                    ${base64_decode}
+
+                    const wasm_code = base64_decode(${wasm_string});
+
+                    init(wasm_code).catch(console.error);
+                `,
+                map: { mappings: '' }
+            };
+
+        } else {
+            return {
+                code: `
+                    import * as exports from ${import_path};
+
+                    ${base64_decode}
+
+                    const wasm_code = base64_decode(${wasm_string});
+
+                    export default async () => {
+                        await exports.default(wasm_code);
+                        return exports;
+                    };
+                `,
+                map: { mappings: '' }
+            };
+        }
 
     } else {
-        return {
-            code: `
-                import * as exports from ${import_path};
+        // TODO use the [name] somehow
+        // TODO generate random name ?
+        const wasm_name = $path.posix.join(options.outDir, name + ".wasm");
 
-                export default async () => {
-                    await exports.default(${import_wasm});
-                    return exports;
-                };
-            `,
-            map: { mappings: '' }
-        };
+        cx.emitFile({
+            type: "asset",
+            source: wasm,
+            fileName: wasm_name
+        });
+
+        const import_wasm = options.importHook(options.serverPath + wasm_name);
+
+        if (is_entry) {
+            return {
+                code: `
+                    import init from ${import_path};
+
+                    init(${import_wasm}).catch(console.error);
+                `,
+                map: { mappings: '' }
+            };
+
+        } else {
+            return {
+                code: `
+                    import * as exports from ${import_path};
+
+                    export default async () => {
+                        await exports.default(${import_wasm});
+                        return exports;
+                    };
+                `,
+                map: { mappings: '' }
+            };
+        }
     }
 }
 
@@ -271,6 +336,10 @@ module.exports = function rust(options = {}) {
 
     if (options.cargoArgs == null) {
         options.cargoArgs = [];
+    }
+
+    if (options.inlineWasm == null) {
+        options.inlineWasm = false;
     }
 
     if (options.verbose == null) {
