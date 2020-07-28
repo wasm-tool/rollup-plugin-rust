@@ -350,7 +350,7 @@ module.exports = function rust(options = {}) {
         name: "rust",
 
         buildStart(rollup) {
-            if (rollup.watch) {
+            if (this.meta.watchMode || rollup.watch) {
                 if (options.watch == null) {
                     options.watch = true;
                 }
