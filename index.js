@@ -145,7 +145,7 @@ async function wasm_pack(cx, dir, source, id, options) {
         "build",
         "--out-dir", out_dir,
         "--out-name", "index",
-        "--target", "web",
+        "--target", (options.target ? options.target : "web"),
         (options.debug ? "--dev" : "--release"),
         "--",
     ].concat(options.cargoArgs);
