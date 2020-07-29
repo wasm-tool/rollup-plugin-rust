@@ -93,7 +93,7 @@ rust({
     // Deployment target. It can be "bundler", "web", "nodejs", "deno", or "no-modules".
     target: "web",
 
-    // Extra arguments to pass to `cargo build`.
+    // Extra arguments directly passed to `cargo build`. See https://rustwasm.github.io/wasm-pack/book/commands/build.html#extra-options.
     cargoArgs: [],
 
     // Whether to inline the `.wasm` file into the `.js` file.
