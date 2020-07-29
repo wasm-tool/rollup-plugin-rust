@@ -149,6 +149,7 @@ async function wasm_pack(cx, dir, source, id, options) {
         "--out-name", outName,
         "--target", (options.target ? options.target : "web"),
         (options.debug ? "--dev" : "--release"),
+        "--mode",(options.mode ? options.mode : "normal"),
         "--",
     ].concat(options.cargoArgs);
 
