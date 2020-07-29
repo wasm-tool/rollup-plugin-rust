@@ -140,11 +140,13 @@ async function wasm_pack(cx, dir, source, id, options) {
 
     await rm(out_dir);
 
+    const outName = (options.outName ? options.outName : "index")
+
     const args = [
         "--log-level", (options.verbose ? "info" : "error"),
         "build",
         "--out-dir", out_dir,
-        "--out-name", "index",
+        "--out-name", outName,
         "--target", (options.target ? options.target : "web"),
         (options.debug ? "--dev" : "--release"),
         "--",
@@ -173,9 +175,9 @@ async function wasm_pack(cx, dir, source, id, options) {
     }
 
     // TODO better way to generate the path
-    const import_path = JSON.stringify("./" + posixPath($path.relative(dir, $path.join(out_dir, "index.js"))));
+    const import_path = JSON.stringify("./" + posixPath($path.relative(dir, $path.join(out_dir, `${outName}.js`))));
 
-    const wasm = await read($path.join(out_dir, "index_bg.wasm"));
+    const wasm = await read($path.join(out_dir, `${outName}_bg.wasm`));
 
     const is_entry = cx.getModuleInfo(id).isEntry;
 

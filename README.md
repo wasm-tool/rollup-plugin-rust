@@ -90,6 +90,9 @@ rust({
     // Directory (relative to output.dir) where the .wasm files will be placed.
     outDir: "",
 
+    // Relates to "--out-name" flag of `wasm-pack`
+    outName: "index",
+
     // Deployment target. It can be "bundler", "web", "nodejs", "deno", or "no-modules".
     target: "web",
 
