@@ -99,6 +99,9 @@ rust({
     // Relates to "--mode" flag of `wasm-pack`. It can be `normal` or `no-install`.
     mode: "normal",
 
+    // Relates to "--scope" flag of `wasm-pack`.
+    scope: "",
+
     // Extra arguments directly passed to `cargo build`. See https://rustwasm.github.io/wasm-pack/book/commands/build.html#extra-options.
     cargoArgs: [],
 

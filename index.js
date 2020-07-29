@@ -142,7 +142,7 @@ async function wasm_pack(cx, dir, source, id, options) {
 
     const outName = (options.outName ? options.outName : "index")
 
-    const args = [
+    let args = [
         "--log-level", (options.verbose ? "info" : "error"),
         "build",
         "--out-dir", out_dir,
@@ -150,8 +150,15 @@ async function wasm_pack(cx, dir, source, id, options) {
         "--target", (options.target ? options.target : "web"),
         (options.debug ? "--dev" : "--release"),
         "--mode",(options.mode ? options.mode : "normal"),
-        "--",
-    ].concat(options.cargoArgs);
+    ]
+
+    if (options.scope) {
+        args = [...args, "--scope", options.scope]
+    }
+
+    if (options.cargoArgs) {
+        args = [...args, "--", ...options.cargoArgs]
+    }
 
     // TODO pretty hacky, but needed to make it work on Windows
     const command = (process.platform === "win32" ? "wasm-pack.cmd" : "wasm-pack");
