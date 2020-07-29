@@ -8,7 +8,7 @@
   },
   "devDependencies": {
     "@wasm-tool/rollup-plugin-rust": "^1.0.0",
-    "rollup": "^1.31.0",
-    "rimraf": "^3.0.2"
+    "rimraf": "^3.0.2",
+    "rollup": "^1.31.0"
   }
 }

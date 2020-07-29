@@ -253,12 +253,33 @@ async function wasm_pack(cx, dir, source, id, options) {
             fileName: wasm_name
         });
 
-        const import_wasm = options.importHook(options.serverPath + wasm_name);
+        let prelude = "";
+
+        let import_wasm = options.importHook(options.serverPath + wasm_name);
+
+        if (options.nodejs) {
+            prelude = `
+            function loadFile(url) {
+                return new Promise((resolve, reject) => {
+                    require("fs").readFile(url, (err, data) => {
+                        if (err) {
+                            reject(err);
+
+                        } else {
+                            resolve(data);
+                        }
+                    });
+                });
+            }`;
+
+            import_wasm = `loadFile(${import_wasm})`;
+        }
 
         if (is_entry) {
             return {
                 code: `
                     import init from ${import_path};
+                    ${prelude}
 
                     init(${import_wasm}).catch(console.error);
                 `,
@@ -269,6 +290,7 @@ async function wasm_pack(cx, dir, source, id, options) {
             return {
                 code: `
                     import * as exports from ${import_path};
+                    ${prelude}
 
                     export default async () => {
                         await exports.default(${import_wasm});
@@ -344,6 +366,10 @@ module.exports = function rust(options = {}) {
 
     if (options.verbose == null) {
         options.verbose = false;
+    }
+
+    if (options.nodejs == null) {
+        options.nodejs = false;
     }
 
     return {
