@@ -129,7 +129,7 @@ async function get_target_dir(dir) {
 }
 
 
-async function wasm_pack(cx, dir, source, id, options) {
+async function wasm_pack(cx, state, dir, source, id, options) {
     const target_dir = await get_target_dir(dir);
 
     const toml = $toml.parse(source);
@@ -243,19 +243,32 @@ async function wasm_pack(cx, dir, source, id, options) {
         }
 
     } else {
-        // TODO use the [name] somehow
-        // TODO generate random name ?
-        const wasm_name = $path.posix.join(options.outDir, name + ".wasm");
+        let fileId;
 
-        cx.emitFile({
-            type: "asset",
-            source: wasm,
-            fileName: wasm_name
-        });
+        if (options.outDir == null) {
+            fileId = cx.emitFile({
+                type: "asset",
+                source: wasm,
+                name: name + ".wasm"
+            });
+
+        } else {
+            cx.warn("The outDir option is deprecated, use output.assetFileNames instead");
+
+            const wasm_name = $path.posix.join(options.outDir, name + ".wasm");
+
+            fileId = cx.emitFile({
+                type: "asset",
+                source: wasm,
+                fileName: wasm_name
+            });
+        }
+
+        state.fileId = fileId;
+
+        let import_wasm = `import.meta.ROLLUP_FILE_URL_${fileId}`;
 
         let prelude = "";
-
-        let import_wasm = options.importHook(options.serverPath + wasm_name);
 
         if (options.nodejs) {
             prelude = `
@@ -320,11 +333,11 @@ async function watch_files(cx, dir, options) {
 }
 
 
-async function build(cx, source, id, options) {
+async function build(cx, state, source, id, options) {
     const dir = $path.dirname(id);
 
     const [output] = await Promise.all([
-        wasm_pack(cx, dir, source, id, options),
+        wasm_pack(cx, state, dir, source, id, options),
         watch_files(cx, dir, options),
     ]);
 
@@ -337,6 +350,8 @@ module.exports = function rust(options = {}) {
     // TODO should the filter affect the Rust compilation ?
     const filter = createFilter(options.include, options.exclude);
 
+    const state = {};
+
     if (options.watchPatterns == null) {
         options.watchPatterns = [
             "src/**"
@@ -345,11 +360,6 @@ module.exports = function rust(options = {}) {
 
     if (options.importHook == null) {
         options.importHook = function (path) { return JSON.stringify(path); };
-    }
-
-    // TODO use output.assetFileNames
-    if (options.outDir == null) {
-        options.outDir = "";
     }
 
     if (options.serverPath == null) {
@@ -389,7 +399,16 @@ module.exports = function rust(options = {}) {
 
         transform(source, id) {
             if ($path.basename(id) === "Cargo.toml" && filter(id)) {
-                return build(this, source, id, options);
+                return build(this, state, source, id, options);
+
+            } else {
+                return null;
+            }
+        },
+
+        resolveFileUrl(info) {
+            if (info.referenceId === state.fileId) {
+                return options.importHook(options.serverPath + info.fileName);
 
             } else {
                 return null;
