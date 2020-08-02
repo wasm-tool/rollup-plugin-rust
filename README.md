@@ -87,9 +87,6 @@ rust({
     // This is prepended to the URL, so you should put a / at the end of the directory, e.g. "/foo/".
     serverPath: "",
 
-    // Directory (relative to output.dir) where the .wasm files will be placed.
-    outDir: "",
-
     // Extra arguments to pass to `cargo build`.
     cargoArgs: [],
 
@@ -103,7 +100,7 @@ rust({
     // This is slower and it increases the file size by ~33%,
     // but it does not require a separate `.wasm` file.
     //
-    // If this is `true` then `serverPath`, `outDir`, `nodejs`,
+    // If this is `true` then `serverPath`, `nodejs`,
     // and `importHook` will be ignored.
     inlineWasm: false,
 
