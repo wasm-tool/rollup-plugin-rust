@@ -306,11 +306,15 @@ async function wasm_pack(cx, state, dir, source, id, options) {
                     ${prelude}
 
                     export default async (input) => {
+                        let path = ${import_wasm};
+
                         if (typeof input === 'function') {
-                            input = input(${import_wasm});
+                            path = input(path);
+                        } else if (input != null) {
+                            path = input;
                         }
 
-                        await exports.default(input ?? ${import_wasm});
+                        await exports.default(path);
                         return exports;
                     };
                 `,
