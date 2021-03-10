@@ -306,9 +306,13 @@ async function wasm_pack(cx, state, dir, source, id, options) {
                     ${prelude}
 
                     export default async (opt = {}) => {
-                        let {importHook} = opt;
+                        let {importHook, serverPath} = opt;
 
                         let path = ${import_wasm};
+
+                        if (serverPath != null) {
+                            pahh = serverPath + path.split('/').pop();
+                        }
 
                         if (importHook != null) {
                             path = input(path);
