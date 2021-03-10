@@ -70,6 +70,26 @@ async function loadWasm() {
 }
 ```
 
+### Customizing the import URL
+
+At build time you can use the `serverPath` and `importHook` options (described below) to customize the import URL for the `.wasm` file.
+
+However, sometimes you need to customize the URL at runtime. In that case you can pass an `importHook` option to the function:
+
+```js
+import wasm from "./path/to/Cargo.toml";
+
+async function loadWasm() {
+    const exports = await wasm({
+        importHook: (path) => "/foo/" + path
+    });
+
+    // Use functions which were exported from Rust...
+}
+```
+
+This will prepend `/foo/` to the import URL.
+
 ## Options
 
 These are the default options:
