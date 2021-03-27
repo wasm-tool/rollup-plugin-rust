@@ -311,7 +311,7 @@ async function wasm_pack(cx, state, dir, source, id, options) {
                         let path = ${import_wasm};
 
                         if (serverPath != null) {
-                            path = serverPath + path.split('/').pop();
+                            path = serverPath + /[^\/\\]*$/.exec(path)[0];
                         }
 
                         if (importHook != null) {
