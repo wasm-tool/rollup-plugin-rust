@@ -3,3 +3,5 @@ Cargo.lock
 yarn.lock
 package-lock.json
 yarn-error.log
+/typescript
+/example-multi
