@@ -221,7 +221,7 @@ async function wasm_pack(cx, state, dir, source, id, options) {
 
                     init(wasm_code).catch(console.error);
                 `,
-                map: { mappings: '' }
+                map: { mappings: '' },
             };
 
         } else {
@@ -238,7 +238,8 @@ async function wasm_pack(cx, state, dir, source, id, options) {
                         return exports;
                     };
                 `,
-                map: { mappings: '' }
+                map: { mappings: '' },
+                moduleSideEffects: false,
             };
         }
 
@@ -296,7 +297,7 @@ async function wasm_pack(cx, state, dir, source, id, options) {
 
                     init(${import_wasm}).catch(console.error);
                 `,
-                map: { mappings: '' }
+                map: { mappings: '' },
             };
 
         } else {
@@ -322,7 +323,8 @@ async function wasm_pack(cx, state, dir, source, id, options) {
                         return exports;
                     };
                 `,
-                map: { mappings: '' }
+                map: { mappings: '' },
+                moduleSideEffects: false,
             };
         }
     }
