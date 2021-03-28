@@ -72,7 +72,7 @@ async function loadWasm() {
 
 ### Customizing the import URL
 
-At build time you can use the `serverPath` and `importHook` build options (described below) to customize the import URL for the `.wasm` file.
+At build time you can use the `serverPath` or `importHook` build options (described below) to customize the import URL for the `.wasm` file.
 
 However, sometimes you need to customize the URL at runtime. In that case you can pass the `serverPath` or `importHook` options to the function (they behave the same as the build options):
 
