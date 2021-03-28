@@ -87,32 +87,32 @@ function wait(p) {
 }
 
 
-const state = {
+const lockState = {
     locked: false,
     pending: [],
 };
 
 async function lock(f) {
-    if (state.locked) {
+    if (lockState.locked) {
         await new Promise(function (resolve, reject) {
-            state.pending.push(resolve);
+            lockState.pending.push(resolve);
         });
 
-        if (state.locked) {
+        if (lockState.locked) {
             throw new Error("Invalid lock state");
         }
     }
 
-    state.locked = true;
+    lockState.locked = true;
 
     try {
         return await f();
 
     } finally {
-        state.locked = false;
+        lockState.locked = false;
 
-        if (state.pending.length !== 0) {
-            const resolve = state.pending.shift();
+        if (lockState.pending.length !== 0) {
+            const resolve = lockState.pending.shift();
             // Wake up pending task
             resolve();
         }
@@ -265,7 +265,7 @@ async function wasm_pack(cx, state, dir, source, id, options) {
             });
         }
 
-        state.fileId = fileId;
+        state.fileIds.add(fileId);
 
         let import_wasm = `import.meta.ROLLUP_FILE_URL_${fileId}`;
 
@@ -312,7 +312,7 @@ async function wasm_pack(cx, state, dir, source, id, options) {
                         let path = ${import_wasm};
 
                         if (serverPath != null) {
-                            path = serverPath + /[^\/\\]*$/.exec(path)[0];
+                            path = serverPath + /[^\\/\\\\]*$/.exec(path)[0];
                         }
 
                         if (importHook != null) {
@@ -364,7 +364,9 @@ module.exports = function rust(options = {}) {
     // TODO should the filter affect the Rust compilation ?
     const filter = createFilter(options.include, options.exclude);
 
-    const state = {};
+    const state = {
+        fileIds: new Set(),
+    };
 
     if (options.watchPatterns == null) {
         options.watchPatterns = [
@@ -400,6 +402,8 @@ module.exports = function rust(options = {}) {
         name: "rust",
 
         buildStart(rollup) {
+            state.fileIds.clear();
+
             if (this.meta.watchMode || rollup.watch) {
                 if (options.watch == null) {
                     options.watch = true;
@@ -421,7 +425,7 @@ module.exports = function rust(options = {}) {
         },
 
         resolveFileUrl(info) {
-            if (info.referenceId === state.fileId) {
+            if (state.fileIds.has(info.referenceId)) {
                 return options.importHook(options.serverPath + info.fileName);
 
             } else {
