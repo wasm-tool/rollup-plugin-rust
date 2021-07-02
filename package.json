@@ -26,6 +26,6 @@
     "rimraf": "^3.0.0",
     "rollup-pluginutils": "^2.8.2",
     "toml": "^3.0.0",
-    "wasm-pack": "^0.9.0"
+    "wasm-pack": "^0.10.0"
   }
 }
