@@ -4,8 +4,8 @@ const $path = require("path");
 const $child = require("child_process");
 const $toml = require("toml");
 const $rimraf = require("rimraf");
+const $os = require("os");
 const { createFilter } = require("rollup-pluginutils");
-
 
 function posixPath(path) {
     return path.replace(/\\/g, $path.posix.sep);
@@ -128,6 +128,22 @@ async function get_target_dir(dir) {
     //return JSON.parse(metadata).target_directory;
 }
 
+function wasm_pack_path() {
+    const arch = $os.arch();
+    const platform = $os.platform();
+    // TODO pretty hacky, but needed to make it work on Windows
+    if (platform === "win32") {
+        return "wasm-pack.cmd"
+    } else if (platform === "darwin" && arch === 'arm64') {
+        // This is to make it work on Apple Silicon.
+        // Requires the user has installed wasm-pack separately since the wasm-pack npm package will
+        // throw on macOS unless 'arch === "x64"'
+        const home = $os.homedir();
+        return $path.join(home, ".cargo/bin/wasm-pack")
+    } else {
+        return "wasm-pack"
+    }
+}
 
 async function wasm_pack(cx, state, dir, source, id, options) {
     const target_dir = await get_target_dir(dir);
@@ -150,8 +166,7 @@ async function wasm_pack(cx, state, dir, source, id, options) {
         "--",
     ].concat(options.cargoArgs);
 
-    // TODO pretty hacky, but needed to make it work on Windows
-    const command = (process.platform === "win32" ? "wasm-pack.cmd" : "wasm-pack");
+    const command = wasm_pack_path();
 
     try {
         // TODO what if it tries to build the same crate multiple times ?
