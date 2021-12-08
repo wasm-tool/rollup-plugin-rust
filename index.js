@@ -7,6 +7,7 @@ const $rimraf = require("rimraf");
 const $os = require("os");
 const { createFilter } = require("rollup-pluginutils");
 
+
 function posixPath(path) {
     return path.replace(/\\/g, $path.posix.sep);
 }
@@ -128,18 +129,17 @@ async function get_target_dir(dir) {
     //return JSON.parse(metadata).target_directory;
 }
 
-function wasm_pack_path() {
-    const arch = $os.arch();
-    const platform = $os.platform();
-    // TODO pretty hacky, but needed to make it work on Windows
-    if (platform === "win32") {
+function wasm_pack_path(options) {
+    if (options.wasmPackPath !== undefined) {
+        if (typeof (options.wasmPackPath) === "string") {
+            // Quick hack to allow use of "~" for home directory?
+            return (options.wasmPackPath.startsWith("~") ? options.wasmPackPath.replace("~", $os.homedir()) : options.wasmPackPath);
+        } else {
+            throw new Error("'wasmPackPath' must be a string")
+        }
+    } else if (process.platform === "win32") {
+        // TODO pretty hacky, but needed to make it work on Windows
         return "wasm-pack.cmd"
-    } else if (platform === "darwin" && arch === 'arm64') {
-        // This is to make it work on Apple Silicon.
-        // Requires the user has installed wasm-pack separately since the wasm-pack npm package will
-        // throw on macOS unless 'arch === "x64"'
-        const home = $os.homedir();
-        return $path.join(home, ".cargo/bin/wasm-pack")
     } else {
         return "wasm-pack"
     }
@@ -166,7 +166,7 @@ async function wasm_pack(cx, state, dir, source, id, options) {
         "--",
     ].concat(options.cargoArgs);
 
-    const command = wasm_pack_path();
+    const command = wasm_pack_path(options);
 
     try {
         // TODO what if it tries to build the same crate multiple times ?
