@@ -136,8 +136,9 @@ rust({
     importHook: function (path) { return JSON.stringify(path); },
 
     // Allows you to define a custom path to wasm-pack.
-    // Use of a '~' prefix will be converted to `os.homedir()`
-    wasmPackPath: "~/.cargo/bin/wasm-pack"
+    // If the path starts with '~' it will be converted to `os.homedir()`
+    // eg. "~/.cargo/bin/wasm-pack -> "/Users/user_name/.cargo/bin/wasm-pack"
+    wasmPackPath: "node_modules/.bin/wasm-pack"
 })
 ```
 
