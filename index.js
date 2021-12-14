@@ -4,6 +4,7 @@ const $path = require("path");
 const $child = require("child_process");
 const $toml = require("toml");
 const $rimraf = require("rimraf");
+const $os = require("os");
 const { createFilter } = require("rollup-pluginutils");
 
 
@@ -128,6 +129,21 @@ async function get_target_dir(dir) {
     //return JSON.parse(metadata).target_directory;
 }
 
+function wasm_pack_path(options) {
+    if (options.wasmPackPath !== undefined) {
+        if (typeof (options.wasmPackPath) === "string") {
+            // Quick hack to allow use of "~" for home directory?
+            return (options.wasmPackPath.startsWith("~") ? options.wasmPackPath.replace("~", $os.homedir()) : options.wasmPackPath);
+        } else {
+            throw new Error("'wasmPackPath' must be a string")
+        }
+    } else if (process.platform === "win32") {
+        // TODO pretty hacky, but needed to make it work on Windows
+        return "wasm-pack.cmd"
+    } else {
+        return "wasm-pack"
+    }
+}
 
 async function wasm_pack(cx, state, dir, source, id, options) {
     const target_dir = await get_target_dir(dir);
@@ -150,8 +166,7 @@ async function wasm_pack(cx, state, dir, source, id, options) {
         "--",
     ].concat(options.cargoArgs);
 
-    // TODO pretty hacky, but needed to make it work on Windows
-    const command = (process.platform === "win32" ? "wasm-pack.cmd" : "wasm-pack");
+    const command = wasm_pack_path(options);
 
     try {
         // TODO what if it tries to build the same crate multiple times ?

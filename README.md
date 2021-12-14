@@ -134,6 +134,11 @@ rust({
 
     // Allows you to customize the behavior for loading the .wasm file, this is for advanced users only!
     importHook: function (path) { return JSON.stringify(path); },
+
+    // Allows you to define a custom path to wasm-pack.
+    // If the path starts with '~' it will be converted to `os.homedir()`
+    // eg. "~/.cargo/bin/wasm-pack -> "/Users/user_name/.cargo/bin/wasm-pack"
+    wasmPackPath: "node_modules/.bin/wasm-pack"
 })
 ```
 

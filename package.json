@@ -25,7 +25,9 @@
     "glob": "^7.1.6",
     "rimraf": "^3.0.0",
     "rollup-pluginutils": "^2.8.2",
-    "toml": "^3.0.0",
+    "toml": "^3.0.0"
+  },
+  "optionalDependencies": {
     "wasm-pack": "^0.10.0"
   }
 }
