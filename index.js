@@ -131,17 +131,21 @@ async function get_target_dir(dir) {
 
 function wasm_pack_path(options) {
     if (options.wasmPackPath !== undefined) {
-        if (typeof (options.wasmPackPath) === "string") {
-            // Quick hack to allow use of "~" for home directory?
-            return (options.wasmPackPath.startsWith("~") ? options.wasmPackPath.replace("~", $os.homedir()) : options.wasmPackPath);
-        } else {
-            throw new Error("'wasmPackPath' must be a string")
+        if (typeof options.wasmPackPath !== "string") {
+            throw new Error("'wasmPackPath' option must be a string");
         }
+
+        // https://www.gnu.org/software/bash/manual/html_node/Tilde-Expansion.html
+        return options.wasmPackPath.replace(/^~(?=$|[\/\\])/, function () {
+            return $os.homedir();
+        });
+
     } else if (process.platform === "win32") {
         // TODO pretty hacky, but needed to make it work on Windows
-        return "wasm-pack.cmd"
+        return "wasm-pack.cmd";
+
     } else {
-        return "wasm-pack"
+        return "wasm-pack";
     }
 }
 
