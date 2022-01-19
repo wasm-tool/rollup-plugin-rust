@@ -140,10 +140,6 @@ function wasm_pack_path(options) {
             return $os.homedir();
         });
 
-    } else if (process.platform === "win32") {
-        // TODO pretty hacky, but needed to make it work on Windows
-        return "wasm-pack.cmd";
-
     } else {
         return "wasm-pack";
     }
