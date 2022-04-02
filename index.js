@@ -265,7 +265,7 @@ async function wasm_pack(cx, state, dir, source, id, options) {
     } else {
         let fileId;
 
-        if (options.outDir == null) {
+        if (!options.outDir) {
             fileId = cx.emitFile({
                 type: "asset",
                 source: wasm,
@@ -330,11 +330,11 @@ async function wasm_pack(cx, state, dir, source, id, options) {
 
                         let path = ${import_wasm};
 
-                        if (serverPath != null) {
+                        if (serverPath) {
                             path = serverPath + /[^\\/\\\\]*$/.exec(path)[0];
                         }
 
-                        if (importHook != null) {
+                        if (importHook) {
                             path = importHook(path);
                         }
 
@@ -387,33 +387,33 @@ module.exports = function rust(options = {}) {
         fileIds: new Set(),
     };
 
-    if (options.watchPatterns == null) {
+    if (!options.watchPatterns) {
         options.watchPatterns = [
             "src/**"
         ];
     }
 
-    if (options.importHook == null) {
+    if (!options.importHook) {
         options.importHook = function (path) { return JSON.stringify(path); };
     }
 
-    if (options.serverPath == null) {
+    if (!options.serverPath) {
         options.serverPath = "";
     }
 
-    if (options.cargoArgs == null) {
+    if (!options.cargoArgs) {
         options.cargoArgs = [];
     }
 
-    if (options.inlineWasm == null) {
+    if (!options.inlineWasm) {
         options.inlineWasm = false;
     }
 
-    if (options.verbose == null) {
+    if (!options.verbose) {
         options.verbose = false;
     }
 
-    if (options.nodejs == null) {
+    if (!options.nodejs) {
         options.nodejs = false;
     }
 
@@ -424,11 +424,11 @@ module.exports = function rust(options = {}) {
             state.fileIds.clear();
 
             if (this.meta.watchMode || rollup.watch) {
-                if (options.watch == null) {
+                if (options.watch === undefined) {
                     options.watch = true;
                 }
 
-                if (options.debug == null) {
+                if (options.debug === undefined) {
                     options.debug = true;
                 }
             }
