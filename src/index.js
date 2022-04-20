@@ -74,15 +74,18 @@ async function run_wasm_opt(cx, out_dir, options) {
     const path = $path.join(out_dir, "index_bg.wasm");
     const tmp = $path.join(out_dir, "wasm_opt.wasm");
 
+    // Needed to make wasm-opt work on Windows
+    const wasm_opt_command = (process.platform === "win32" ? "wasm-opt.cmd" : "wasm-opt");
+
     const wasm_opt_args = [path, "--output", tmp, "-O"];
 
     if (options.verbose) {
-        debug(`Running wasm-opt ${wasm_opt_args.join(" ")}`);
+        debug(`Running ${wasm_opt_command} ${wasm_opt_args.join(" ")}`);
     }
 
     try {
         // TODO figure out better optimization options ?
-        await spawn("wasm-opt", wasm_opt_args, { cwd: out_dir, shell: true, stdio: "inherit" });
+        await spawn(wasm_opt_command, wasm_opt_args, { cwd: out_dir, stdio: "inherit" });
 
     } catch (e) {
         cx.warn("wasm-opt failed: " + e.message);
