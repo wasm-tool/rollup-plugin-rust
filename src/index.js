@@ -1,21 +1,23 @@
 const $path = require("path");
 const $toml = require("toml");
 const { createFilter } = require("rollup-pluginutils");
-const { posix_path, glob, rm, mv, read, spawn, lock, debug } = require("./utils");
+const { posix_path, glob, rm, mv, read, exec, spawn, lock, debug } = require("./utils");
 const { run_wasm_bindgen } = require("./wasm-bindgen");
 
 
 async function get_target_dir(dir) {
-    return "target";
-
-    // TODO make this faster somehow
-    //const metadata = await exec("cargo metadata --no-deps --format-version 1", { cwd: dir });
-    //return JSON.parse(metadata).target_directory;
+    // TODO make this faster somehow ?
+    const metadata = await exec("cargo metadata --format-version 1 --no-deps --color never", { cwd: dir });
+    return JSON.parse(metadata).target_directory;
 }
 
 
 async function get_out_dir(dir, name, options) {
     const target_dir = await get_target_dir(dir);
+
+    if (options.verbose) {
+        debug(`Using target directory ${target_dir}`);
+    }
 
     const out_dir = $path.resolve($path.join(target_dir, "rollup-plugin-rust", name));
 
@@ -27,7 +29,7 @@ async function get_out_dir(dir, name, options) {
     ));
 
     if (options.verbose) {
-        debug(`Using rustc directory ${wasm_path}`);
+        debug(`Using rustc output ${wasm_path}`);
         debug(`Using output directory ${out_dir}`);
     }
 
