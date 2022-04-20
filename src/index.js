@@ -105,7 +105,7 @@ async function compile_js(cx, state, name, dir, out_dir, id, options) {
     const wasm_path = $path.join(out_dir, "index_bg.wasm");
 
     if (options.verbose) {
-        debug(`Looking for wasm at ${wasm_path}}`);
+        debug(`Looking for wasm at ${wasm_path}`);
     }
 
     const wasm = await read(wasm_path);
