@@ -269,7 +269,8 @@ async function compile_rust(cx, state, dir, source, id, options) {
 
     validate_toml(toml);
 
-    const name = toml.package.name;
+    // TODO does it need to do more transformations on the name ?
+    const name = toml.package.name.replace(/\-/g, "_");
 
     try {
         // TODO what if it tries to build the same crate multiple times ?
