@@ -82,7 +82,7 @@ async function run_wasm_opt(cx, out_dir, options) {
 
     try {
         // TODO figure out better optimization options ?
-        await spawn("wasm-opt", wasm_opt_args, { cwd: out_dir, stdio: "inherit" });
+        await spawn("wasm-opt", wasm_opt_args, { cwd: out_dir, shell: true, stdio: "inherit" });
 
     } catch (e) {
         cx.warn("wasm-opt failed: " + e.message);
