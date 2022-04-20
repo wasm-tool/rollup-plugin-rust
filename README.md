@@ -2,9 +2,9 @@
 
 Rollup plugin for bundling and importing Rust crates.
 
-This plugin internally uses [`wasm-pack`](https://rustwasm.github.io/wasm-pack/) and [`wasm-bindgen`](https://rustwasm.github.io/docs/wasm-bindgen/).
+This plugin internally uses [`wasm-bindgen`](https://rustwasm.github.io/docs/wasm-bindgen/).
 
-`wasm-pack` is automatically installed, you do not need to install it separately.
+`wasm-bindgen` is automatically installed, you do not need to install it separately.
 
 ## Installation
 
@@ -136,13 +136,6 @@ rust({
 
     // Allows you to customize the behavior for loading the .wasm file, this is for advanced users only!
     importHook: function (path) { return JSON.stringify(path); },
-
-    // Custom path to the wasm-pack binary. This is normally not needed,
-    // but it is useful if you have a custom build of wasm-pack.
-    //
-    // `~` will be replaced with `$HOME`, for example:
-    // "~/.cargo/bin/wasm-pack" -> "/home/foo/.cargo/bin/wasm-pack"
-    wasmPackPath: "node_modules/.bin/wasm-pack"
 })
 ```
 

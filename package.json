@@ -19,16 +19,15 @@
     "rollup",
     "plugin",
     "webassembly",
-    "wasm-pack",
     "wasm-bindgen"
   ],
   "dependencies": {
-    "glob": "^7.1.6",
+    "binaryen": "^106.0.0",
+    "glob": "^8.0.1",
+    "node-fetch": "^2.0.0",
     "rimraf": "^3.0.0",
     "rollup-pluginutils": "^2.8.2",
+    "tar": "^6.1.11",
     "toml": "^3.0.0"
-  },
-  "optionalDependencies": {
-    "wasm-pack": "^0.10.0"
   }
 }

@@ -1,9 +1,8 @@
 const $path = require("path");
-const $child = require("child_process");
 const $toml = require("toml");
-const $os = require("os");
 const { createFilter } = require("rollup-pluginutils");
-const { posix_path, glob, rm, read, exec, wait, lock } = require("./utils");
+const { posix_path, glob, rm, mv, read, spawn, lock } = require("./utils");
+const { run_wasm_bindgen } = require("./wasm-bindgen");
 
 
 async function get_target_dir(dir) {
@@ -14,68 +13,65 @@ async function get_target_dir(dir) {
     //return JSON.parse(metadata).target_directory;
 }
 
-function wasm_pack_path(options) {
-    if (options.wasmPackPath !== undefined) {
-        if (typeof options.wasmPackPath !== "string") {
-            throw new Error("'wasmPackPath' option must be a string");
-        }
 
-        // https://www.gnu.org/software/bash/manual/html_node/Tilde-Expansion.html
-        return options.wasmPackPath.replace(/^~(?=$|[\/\\])/, function () {
-            return $os.homedir();
-        });
-
-    } else if (process.platform === "win32") {
-        // TODO pretty hacky, but needed to make it work on Windows
-        return "wasm-pack.cmd";
-
-    } else {
-        return "wasm-pack";
-    }
-}
-
-async function wasm_pack(cx, state, dir, source, id, options) {
+async function get_out_dir(dir, name, options) {
     const target_dir = await get_target_dir(dir);
 
-    const toml = $toml.parse(source);
-
-    const name = toml.package.name;
-
-    const out_dir = $path.resolve($path.join(target_dir, "wasm-pack", name));
+    const out_dir = $path.resolve($path.join(target_dir, "rollup-plugin-rust", name));
 
     await rm(out_dir);
 
-    const args = [
-        "--log-level", (options.verbose ? "info" : "error"),
-        "build",
-        "--out-dir", out_dir,
-        "--out-name", "index",
-        "--target", "web",
-        (options.debug ? "--dev" : "--release"),
-        "--",
-    ].concat(options.cargoArgs);
+    const wasm_path = $path.join(target_dir, "wasm32-unknown-unknown", (options.debug ? "debug" : "release"), name + ".wasm");
 
-    const command = wasm_pack_path(options);
+    return { out_dir, wasm_path };
+}
 
-    try {
-        // TODO what if it tries to build the same crate multiple times ?
-        // TODO maybe it can run `cargo fetch` without locking ?
-        await lock(async function () {
-            await wait($child.spawn(command, args, { cwd: dir, stdio: "inherit" }));
-        });
 
-    } catch (e) {
-        if (e.code === "ENOENT") {
-            throw new Error("Could not find wasm-pack, please report this as a bug");
-
-        } else if (options.verbose) {
-            throw e;
-
-        } else {
-            throw new Error("Rust compilation failed");
-        }
+function validate_toml(toml) {
+    if (toml.lib && Array.isArray(toml.lib["crate-type"]) && toml.lib["crate-type"].indexOf("cdylib") !== -1) {
+        return;
     }
 
+    throw new Error("Cargo.toml must have use `crate-type = [\"cdylib\"]`");
+}
+
+
+async function run_cargo(dir, options) {
+    let cargoArgs = [
+        "build",
+        "--lib",
+        "--target", "wasm32-unknown-unknown",
+    ];
+
+    if (!options.debug) {
+        cargoArgs.push("--release");
+    }
+
+    cargoArgs = cargoArgs.concat(options.cargoArgs);
+
+    await spawn("cargo", cargoArgs, { cwd: dir, stdio: "inherit" });
+}
+
+
+// Replace with @webassemblyjs/wasm-opt ?
+async function run_wasm_opt(cx, out_dir) {
+    const path = $path.join(out_dir, "index_bg.wasm");
+    const tmp = $path.join(out_dir, "wasm_opt.wasm");
+
+    try {
+        // TODO figure out better optimization options ?
+        await spawn("wasm-opt", [path, "--output", tmp, "-O"], { cwd: out_dir, stdio: "inherit" });
+
+    } catch (e) {
+        cx.warn("wasm-opt failed: " + e.message);
+        return;
+    }
+
+    await mv(tmp, path);
+}
+
+
+async function compile_js(cx, state, name, dir, out_dir, id, options) {
     // TODO better way to generate the path
     const import_path = JSON.stringify("./" + posix_path($path.relative(dir, $path.join(out_dir, "index.js"))));
 
@@ -235,6 +231,41 @@ async function wasm_pack(cx, state, dir, source, id, options) {
 }
 
 
+async function compile_rust(cx, state, dir, source, id, options) {
+    const toml = $toml.parse(source);
+
+    validate_toml(toml);
+
+    const name = toml.package.name;
+
+    try {
+        // TODO what if it tries to build the same crate multiple times ?
+        // TODO maybe it can run `cargo fetch` without locking ?
+        return await lock(async function () {
+            await run_cargo(dir, options);
+
+            const { wasm_path, out_dir } = await get_out_dir(dir, name, options);
+
+            await run_wasm_bindgen(dir, wasm_path, out_dir);
+
+            if (!options.debug) {
+                await run_wasm_opt(cx, out_dir);
+            }
+
+            return compile_js(cx, state, name, dir, out_dir, id, options);
+        });
+
+    } catch (e) {
+        if (options.verbose) {
+            throw e;
+
+        } else {
+            throw new Error("Rust compilation failed: " + e.message);
+        }
+    }
+}
+
+
 async function watch_files(cx, dir, options) {
     if (options.watch) {
         const matches = await Promise.all(options.watchPatterns.map(function (pattern) {
@@ -255,7 +286,7 @@ async function build(cx, state, source, id, options) {
     const dir = $path.dirname(id);
 
     const [output] = await Promise.all([
-        wasm_pack(cx, state, dir, source, id, options),
+        compile_rust(cx, state, dir, source, id, options),
         watch_files(cx, dir, options),
     ]);
 
@@ -307,6 +338,10 @@ module.exports = function rust(options = {}) {
 
         buildStart(rollup) {
             state.fileIds.clear();
+
+            if (options.wasmPackPath !== undefined) {
+                this.warn("The wasmPackPath option is deprecated and no longer works");
+            }
 
             if (this.meta.watchMode || rollup.watch) {
                 if (options.watch == null) {

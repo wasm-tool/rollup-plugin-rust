@@ -1,8 +1,30 @@
 const $path = require("path");
 const $glob = require("glob");
 const $rimraf = require("rimraf");
+const $stream = require("stream");
 const $fs = require("fs");
+const $os = require("os");
 const $child = require("child_process");
+const $tar = require("tar");
+
+
+function get_cache_dir(name) {
+    switch (process.platform) {
+    case "win32":
+        const local_app_data = process.env.LOCALAPPDATA || $path.join($os.homedir(), "AppData", "Local");
+        return $path.join(local_app_data, name, "Cache");
+
+    case "darwin":
+        return $path.join($os.homedir(), "Library", "Caches", name);
+
+    // https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
+    default:
+        const cache_dir = process.env.XDG_CACHE_HOME || $path.join($os.homedir(), ".cache");
+        return $path.join(cache_dir, name);
+    }
+}
+
+exports.get_cache_dir = get_cache_dir;
 
 
 function posix_path(path) {
@@ -49,6 +71,51 @@ function rm(path) {
 exports.rm = rm;
 
 
+function mv(from, to) {
+    return new Promise((resolve, reject) => {
+        $fs.rename(from, to, (err) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve();
+            }
+        });
+    });
+}
+
+exports.mv = mv;
+
+
+function mkdir(path) {
+    return new Promise((resolve, reject) => {
+        $fs.mkdir(path, { recursive: true }, (err) => {
+            if (err) {
+                reject(err);
+            } else {
+                resolve();
+            }
+        });
+    });
+}
+
+exports.mkdir = mkdir;
+
+
+function exists(path) {
+    return new Promise((resolve, reject) => {
+        $fs.access(path, (err) => {
+            if (err) {
+                resolve(false);
+            } else {
+                resolve(true);
+            }
+        });
+    });
+}
+
+exports.exists = exists;
+
+
 function read(path) {
     return new Promise(function (resolve, reject) {
         $fs.readFile(path, function (err, file) {
@@ -84,6 +151,13 @@ function exec(cmd, options) {
 exports.exec = exec;
 
 
+function spawn(command, args, options) {
+    return wait($child.spawn(command, args, options));
+}
+
+exports.spawn = spawn;
+
+
 function wait(p) {
     return new Promise((resolve, reject) => {
         p.on("close", (code) => {
@@ -100,6 +174,28 @@ function wait(p) {
 }
 
 exports.wait = wait;
+
+
+function tar(stream, options) {
+    return new Promise((resolve, reject) => {
+        $stream.pipeline(
+            stream,
+            $tar.x({
+                cwd: options.cwd,
+                strict: true,
+            }, options.files),
+            (err) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    resolve();
+                }
+            },
+        );
+    });
+}
+
+exports.tar = tar;
 
 
 const lockState = {
