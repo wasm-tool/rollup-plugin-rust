@@ -71,12 +71,13 @@ async function run_cargo(dir, options) {
 
 // Replace with @webassemblyjs/wasm-opt ?
 async function run_wasm_opt(cx, out_dir, options) {
-    const path = $path.join(out_dir, "index_bg.wasm");
-    const tmp = $path.join(out_dir, "wasm_opt.wasm");
+    const path = "index_bg.wasm";
+    const tmp = "wasm_opt.wasm";
 
     // Needed to make wasm-opt work on Windows
     const wasm_opt_command = (process.platform === "win32" ? "wasm-opt.cmd" : "wasm-opt");
 
+    // TODO figure out better optimization options ?
     const wasm_opt_args = [path, "--output", tmp, "-O"];
 
     if (options.verbose) {
@@ -84,7 +85,6 @@ async function run_wasm_opt(cx, out_dir, options) {
     }
 
     try {
-        // TODO figure out better optimization options ?
         await spawn(wasm_opt_command, wasm_opt_args, { cwd: out_dir, stdio: "inherit" });
 
     } catch (e) {
@@ -92,7 +92,7 @@ async function run_wasm_opt(cx, out_dir, options) {
         return;
     }
 
-    await mv(tmp, path);
+    await mv($path.join(out_dir, tmp), $path.join(out_dir, path));
 }
 
 
