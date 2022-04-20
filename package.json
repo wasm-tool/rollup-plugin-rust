@@ -23,6 +23,7 @@
   ],
   "dependencies": {
     "binaryen": "^106.0.0",
+    "chalk": "^4.0.0",
     "glob": "^8.0.1",
     "node-fetch": "^2.0.0",
     "rimraf": "^3.0.0",

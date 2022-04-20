@@ -1,5 +1,6 @@
 const $path = require("path");
 const $glob = require("glob");
+const $chalk = require("chalk");
 const $rimraf = require("rimraf");
 const $stream = require("stream");
 const $fs = require("fs");
@@ -32,6 +33,20 @@ function posix_path(path) {
 }
 
 exports.posix_path = posix_path;
+
+
+function debug(s) {
+    console.debug($chalk.blue("> " + s + "\n"));
+}
+
+exports.debug = debug;
+
+
+function info(s) {
+    console.info($chalk.yellow(s));
+}
+
+exports.info = info;
 
 
 function glob(pattern, cwd) {

@@ -1,7 +1,7 @@
 const $path = require("path");
 const $tar = require("tar");
 const $fetch = require("node-fetch");
-const { exec, mkdir, get_cache_dir, tar, exists, spawn } = require("./utils");
+const { exec, mkdir, get_cache_dir, tar, exists, spawn, info, debug } = require("./utils");
 
 
 function wasm_bindgen_name(version) {
@@ -57,7 +57,7 @@ async function download_wasm_bindgen(url, dir) {
 }
 
 
-async function get_wasm_bindgen(dir) {
+async function get_wasm_bindgen(dir, options) {
     const version = await wasm_bindgen_version(dir);
     const name = wasm_bindgen_name(version);
 
@@ -66,8 +66,12 @@ async function get_wasm_bindgen(dir) {
 
     const path = wasm_bindgen_path($path.join(cache_dir, name));
 
+    if (options.verbose) {
+        debug(`Searching for wasm-bindgen at ${path}`);
+    }
+
     if (!(await exists(path))) {
-        console.info(`Downloading wasm-bindgen version ${version}`);
+        info(`Downloading wasm-bindgen version ${version}`);
         await download_wasm_bindgen(wasm_bindgen_url(version, name), cache_dir);
     }
 
@@ -75,17 +79,23 @@ async function get_wasm_bindgen(dir) {
 }
 
 
-async function run_wasm_bindgen(dir, wasm_path, out_dir) {
-    const wasm_bindgen_command = await get_wasm_bindgen(dir);
+async function run_wasm_bindgen(dir, wasm_path, out_dir, options) {
+    const wasm_bindgen_command = await get_wasm_bindgen(dir, options);
 
-    const wasmBindgenArgs = [
+    // TODO what about --debug --no-demangle --keep-debug ?
+    const wasm_bindgen_args = [
         "--out-dir", out_dir,
         "--out-name", "index",
         "--target", "web",
+        "--no-typescript", // TODO make TypeScript work properly
         wasm_path,
     ];
 
-    await spawn(wasm_bindgen_command, wasmBindgenArgs, { cwd: dir, stdio: "inherit" });
+    if (options.verbose) {
+        debug(`Running wasm-bindgen ${wasm_bindgen_args.join(" ")}`);
+    }
+
+    await spawn(wasm_bindgen_command, wasm_bindgen_args, { cwd: dir, stdio: "inherit" });
 }
 
 exports.run_wasm_bindgen = run_wasm_bindgen;

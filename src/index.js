@@ -1,7 +1,7 @@
 const $path = require("path");
 const $toml = require("toml");
 const { createFilter } = require("rollup-pluginutils");
-const { posix_path, glob, rm, mv, read, spawn, lock } = require("./utils");
+const { posix_path, glob, rm, mv, read, spawn, lock, debug } = require("./utils");
 const { run_wasm_bindgen } = require("./wasm-bindgen");
 
 
@@ -19,9 +19,19 @@ async function get_out_dir(dir, name, options) {
 
     const out_dir = $path.resolve($path.join(target_dir, "rollup-plugin-rust", name));
 
-    await rm(out_dir);
+    const wasm_path = $path.resolve($path.join(
+        target_dir,
+        "wasm32-unknown-unknown",
+        (options.debug ? "debug" : "release"),
+        name + ".wasm"
+    ));
 
-    const wasm_path = $path.join(target_dir, "wasm32-unknown-unknown", (options.debug ? "debug" : "release"), name + ".wasm");
+    if (options.verbose) {
+        debug(`Using rustc directory ${wasm_path}`);
+        debug(`Using output directory ${out_dir}`);
+    }
+
+    await rm(out_dir);
 
     return { out_dir, wasm_path };
 }
@@ -32,35 +42,47 @@ function validate_toml(toml) {
         return;
     }
 
-    throw new Error("Cargo.toml must have use `crate-type = [\"cdylib\"]`");
+    throw new Error("Cargo.toml must use `crate-type = [\"cdylib\"]`");
 }
 
 
 async function run_cargo(dir, options) {
-    let cargoArgs = [
+    let cargo_args = [
         "build",
         "--lib",
         "--target", "wasm32-unknown-unknown",
     ];
 
     if (!options.debug) {
-        cargoArgs.push("--release");
+        cargo_args.push("--release");
     }
 
-    cargoArgs = cargoArgs.concat(options.cargoArgs);
+    if (options.cargo_args) {
+        cargo_args = cargo_args.concat(options.cargo_args);
+    }
 
-    await spawn("cargo", cargoArgs, { cwd: dir, stdio: "inherit" });
+    if (options.verbose) {
+        debug(`Running cargo ${cargo_args.join(" ")}`);
+    }
+
+    await spawn("cargo", cargo_args, { cwd: dir, stdio: "inherit" });
 }
 
 
 // Replace with @webassemblyjs/wasm-opt ?
-async function run_wasm_opt(cx, out_dir) {
+async function run_wasm_opt(cx, out_dir, options) {
     const path = $path.join(out_dir, "index_bg.wasm");
     const tmp = $path.join(out_dir, "wasm_opt.wasm");
 
+    const wasm_opt_args = [path, "--output", tmp, "-O"];
+
+    if (options.verbose) {
+        debug(`Running wasm-opt ${wasm_opt_args.join(" ")}`);
+    }
+
     try {
         // TODO figure out better optimization options ?
-        await spawn("wasm-opt", [path, "--output", tmp, "-O"], { cwd: out_dir, stdio: "inherit" });
+        await spawn("wasm-opt", wasm_opt_args, { cwd: out_dir, stdio: "inherit" });
 
     } catch (e) {
         cx.warn("wasm-opt failed: " + e.message);
@@ -75,7 +97,13 @@ async function compile_js(cx, state, name, dir, out_dir, id, options) {
     // TODO better way to generate the path
     const import_path = JSON.stringify("./" + posix_path($path.relative(dir, $path.join(out_dir, "index.js"))));
 
-    const wasm = await read($path.join(out_dir, "index_bg.wasm"));
+    const wasm_path = $path.join(out_dir, "index_bg.wasm");
+
+    if (options.verbose) {
+        debug(`Looking for wasm at ${wasm_path}}`);
+    }
+
+    const wasm = await read(wasm_path);
 
     const is_entry = cx.getModuleInfo(id).isEntry;
 
@@ -246,10 +274,10 @@ async function compile_rust(cx, state, dir, source, id, options) {
 
             const { wasm_path, out_dir } = await get_out_dir(dir, name, options);
 
-            await run_wasm_bindgen(dir, wasm_path, out_dir);
+            await run_wasm_bindgen(dir, wasm_path, out_dir, options);
 
             if (!options.debug) {
-                await run_wasm_opt(cx, out_dir);
+                await run_wasm_opt(cx, out_dir, options);
             }
 
             return compile_js(cx, state, name, dir, out_dir, id, options);
@@ -260,7 +288,9 @@ async function compile_rust(cx, state, dir, source, id, options) {
             throw e;
 
         } else {
-            throw new Error("Rust compilation failed: " + e.message);
+            const e = new Error("Rust compilation failed");
+            e.stack = null;
+            throw e;
         }
     }
 }
