@@ -1,124 +1,9 @@
-const $fs = require("fs");
-const $glob = require("glob");
 const $path = require("path");
 const $child = require("child_process");
 const $toml = require("toml");
-const $rimraf = require("rimraf");
 const $os = require("os");
 const { createFilter } = require("rollup-pluginutils");
-
-
-function posixPath(path) {
-    return path.replace(/\\/g, $path.posix.sep);
-}
-
-function glob(pattern, cwd) {
-    return new Promise(function (resolve, reject) {
-        $glob(pattern, {
-            cwd: cwd,
-            strict: true,
-            absolute: true,
-            nodir: true
-        }, function (err, files) {
-            if (err) {
-                reject(err);
-
-            } else {
-                resolve(files);
-            }
-        });
-    });
-}
-
-function rm(path) {
-    return new Promise(function (resolve, reject) {
-        $rimraf(path, { glob: false }, function (err) {
-            if (err) {
-                reject(err);
-
-            } else {
-                resolve();
-            }
-        });
-    });
-}
-
-function read(path) {
-    return new Promise(function (resolve, reject) {
-        $fs.readFile(path, function (err, file) {
-            if (err) {
-                reject(err);
-
-            } else {
-                resolve(file);
-            }
-        });
-    });
-}
-
-function exec(cmd, options) {
-    return new Promise((resolve, reject) => {
-        $child.exec(cmd, options, (err, stdout, stderr) => {
-            if (err) {
-                reject(err);
-
-            } else if (stderr.length > 0) {
-                reject(new Error(stderr));
-
-            } else {
-                resolve(stdout);
-            }
-        });
-    });
-}
-
-function wait(p) {
-    return new Promise((resolve, reject) => {
-        p.on("close", (code) => {
-            if (code === 0) {
-                resolve();
-
-            } else {
-                reject(new Error("Command `" + p.spawnargs.join(" ") + "` failed with error code: " + code));
-            }
-        });
-
-        p.on("error", reject);
-    });
-}
-
-
-const lockState = {
-    locked: false,
-    pending: [],
-};
-
-async function lock(f) {
-    if (lockState.locked) {
-        await new Promise(function (resolve, reject) {
-            lockState.pending.push(resolve);
-        });
-
-        if (lockState.locked) {
-            throw new Error("Invalid lock state");
-        }
-    }
-
-    lockState.locked = true;
-
-    try {
-        return await f();
-
-    } finally {
-        lockState.locked = false;
-
-        if (lockState.pending.length !== 0) {
-            const resolve = lockState.pending.shift();
-            // Wake up pending task
-            resolve();
-        }
-    }
-}
+const { posix_path, glob, rm, read, exec, wait, lock } = require("./utils");
 
 
 async function get_target_dir(dir) {
@@ -192,7 +77,7 @@ async function wasm_pack(cx, state, dir, source, id, options) {
     }
 
     // TODO better way to generate the path
-    const import_path = JSON.stringify("./" + posixPath($path.relative(dir, $path.join(out_dir, "index.js"))));
+    const import_path = JSON.stringify("./" + posix_path($path.relative(dir, $path.join(out_dir, "index.js"))));
 
     const wasm = await read($path.join(out_dir, "index_bg.wasm"));
 
