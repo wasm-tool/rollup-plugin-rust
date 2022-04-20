@@ -7,6 +7,7 @@
   "repository": "github:wasm-tool/rollup-plugin-rust",
   "homepage": "https://github.com/wasm-tool/rollup-plugin-rust#readme",
   "bugs": "https://github.com/wasm-tool/rollup-plugin-rust/issues",
+  "main": "src/index.js",
   "directories": {
     "example": "example"
   },
