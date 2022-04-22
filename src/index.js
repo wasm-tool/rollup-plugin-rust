@@ -59,8 +59,8 @@ async function run_cargo(dir, options) {
         cargo_args.push("--release");
     }
 
-    if (options.cargo_args) {
-        cargo_args = cargo_args.concat(options.cargo_args);
+    if (options.cargoArgs) {
+        cargo_args = cargo_args.concat(options.cargoArgs);
     }
 
     if (options.verbose) {
