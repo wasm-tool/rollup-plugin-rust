@@ -98,28 +98,27 @@ Usually you only need to pass one or the other, not both. Use `serverPath` for r
 
 ## Build options
 
+The default options are good for most use cases, so you generally shouldn't need to change them.
+
 These are the default options:
 
 ```js
 rust({
+    // Directory on your server where the .wasm files will be loaded from.
+    // This is prepended to the URL, so you should put a / at the end of the directory, e.g. "/foo/".
+    serverPath: "",
+
+    // Whether the code will be run in Node.js or not.
+    //
+    // This is needed because Node.js does not support `fetch`.
+    nodejs: false,
+
     // Whether to build in debug mode or release mode.
     // In watch mode this defaults to true.
     debug: false,
 
     // Whether to display extra compilation information in the console.
     verbose: false,
-
-    // Directory on your server where the .wasm files will be loaded from.
-    // This is prepended to the URL, so you should put a / at the end of the directory, e.g. "/foo/".
-    serverPath: "",
-
-    // Extra arguments to pass to `cargo build`.
-    cargoArgs: [],
-
-    // Whether the code will be run in Node.js or not.
-    //
-    // This is needed because Node.js does not support `fetch`.
-    nodejs: false,
 
     // Whether to inline the `.wasm` file into the `.js` file.
     //
@@ -130,6 +129,12 @@ rust({
     // and `importHook` will be ignored.
     inlineWasm: false,
 
+    // Extra arguments passed to `cargo build`.
+    cargoArgs: [],
+
+    // Arguments passed to `wasm-opt`
+    wasmOptArgs: ["-O"],
+
     // Which files it should watch in watch mode. This is relative to the crate directory.
     // Supports all of the glob syntax.
     watchPatterns: ["src/**"],
@@ -138,8 +143,6 @@ rust({
     importHook: function (path) { return JSON.stringify(path); },
 })
 ```
-
-The defaults are good for most use cases, so you generally shouldn't need to change them.
 
 ### Chrome / Firefox extensions
 

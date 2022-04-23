@@ -79,8 +79,7 @@ async function run_wasm_opt(cx, out_dir, options) {
     // Needed to make wasm-opt work on Windows
     const wasm_opt_command = (process.platform === "win32" ? "wasm-opt.cmd" : "wasm-opt");
 
-    // TODO figure out better optimization options ?
-    const wasm_opt_args = [path, "--output", tmp, "-O"];
+    const wasm_opt_args = [path, "--output", tmp].concat(options.wasmOptArgs);
 
     if (options.verbose) {
         debug(`Running ${wasm_opt_command} ${wasm_opt_args.join(" ")}`);
@@ -355,6 +354,11 @@ module.exports = function rust(options = {}) {
 
     if (options.cargoArgs == null) {
         options.cargoArgs = [];
+    }
+
+    if (options.wasmOptArgs == null) {
+        // TODO figure out better optimization options ?
+        options.wasmOptArgs = ["-O"];
     }
 
     if (options.inlineWasm == null) {
