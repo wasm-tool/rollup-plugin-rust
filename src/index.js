@@ -19,7 +19,8 @@ async function get_out_dir(dir, name, options) {
         debug(`Using target directory ${target_dir}`);
     }
 
-    const out_dir = $path.resolve($path.join(target_dir, "rollup-plugin-rust", name));
+    // TODO use a randomly generated name ?
+    const out_dir = $path.resolve($path.join(dir, ".__rollup-plugin-rust__" + name));
 
     const wasm_path = $path.resolve($path.join(
         target_dir,
@@ -110,6 +111,8 @@ async function compile_js(cx, state, name, dir, out_dir, id, options) {
     const wasm = await read(wasm_path);
 
     const is_entry = cx.getModuleInfo(id).isEntry;
+
+    state.removeDirs.add(out_dir);
 
     if (options.inlineWasm) {
         const base64_decode = `
@@ -336,6 +339,7 @@ module.exports = function rust(options = {}) {
 
     const state = {
         fileIds: new Set(),
+        removeDirs: new Set(),
     };
 
     if (options.watchPatterns == null) {
@@ -373,11 +377,18 @@ module.exports = function rust(options = {}) {
         options.nodejs = false;
     }
 
+    function* removeDirs() {
+        for (dir of state.removeDirs) {
+            yield rm(dir);
+        }
+    }
+
     return {
         name: "rust",
 
         buildStart(rollup) {
             state.fileIds.clear();
+            state.removeDirs.clear();
 
             if (options.wasmPackPath !== undefined) {
                 this.warn("The wasmPackPath option is deprecated and no longer works");
@@ -410,6 +421,10 @@ module.exports = function rust(options = {}) {
             } else {
                 return null;
             }
+        },
+
+        buildEnd(error) {
+            return Promise.all(removeDirs());
         },
     };
 };
