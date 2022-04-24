@@ -4,7 +4,7 @@
   "author": "You <you@example.com>",
   "version": "0.1.0",
   "scripts": {
-    "test:foo": "cd src/foo && yarn install --force",
+    "test:foo": "cd src/foo && yarn install",
     "test": "yarn test:foo && yarn install --force && rimraf dist/js && rollup --config"
   },
   "devDependencies": {

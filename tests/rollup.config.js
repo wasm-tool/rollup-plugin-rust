@@ -4,8 +4,8 @@ import commonjs from "@rollup/plugin-commonjs";
 
 export default {
     input: {
-        foo: "src/foo/Cargo.toml",
-        bar: "src/bar/Cargo.toml",
+        foo: "./src/foo.js",
+        bar: "./src/bar.js",
     },
     output: {
         dir: "dist/js",
