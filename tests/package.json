@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "scripts": {
     "test:foo": "cd src/foo && yarn install",
-    "test": "yarn test:foo && yarn install && rimraf dist/js && rollup --config",
+    "test": "yarn test:foo && yarn install --force && rimraf dist/js && rollup --config",
     "serve": "live-server dist"
   },
   "devDependencies": {

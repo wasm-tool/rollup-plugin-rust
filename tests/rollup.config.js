@@ -19,6 +19,7 @@ export default {
 
         rust({
             serverPath: "js/",
+            wasmBindgenArgs: ["--debug", "--keep-debug"],
         }),
     ],
 };

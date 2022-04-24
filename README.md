@@ -132,7 +132,10 @@ rust({
     // Extra arguments passed to `cargo build`.
     cargoArgs: [],
 
-    // Arguments passed to `wasm-opt`
+    // Extra arguments passed to `wasm-bindgen`.
+    wasmBindgenArgs: [],
+
+    // Arguments passed to `wasm-opt`.
     wasmOptArgs: ["-O"],
 
     // Which files it should watch in watch mode. This is relative to the crate directory.

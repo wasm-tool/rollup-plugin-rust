@@ -83,13 +83,17 @@ async function run_wasm_bindgen(dir, wasm_path, out_dir, options) {
     const wasm_bindgen_command = await get_wasm_bindgen(dir, options);
 
     // TODO what about --debug --no-demangle --keep-debug ?
-    const wasm_bindgen_args = [
+    let wasm_bindgen_args = [
         "--out-dir", out_dir,
         "--out-name", "index",
         "--target", "web",
         "--no-typescript", // TODO make TypeScript work properly
         wasm_path,
     ];
+
+    if (options.wasmBindgenArgs) {
+        wasm_bindgen_args = wasm_bindgen_args.concat(options.wasmBindgenArgs);
+    }
 
     if (options.verbose) {
         debug(`Running wasm-bindgen ${wasm_bindgen_args.join(" ")}`);

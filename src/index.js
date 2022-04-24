@@ -356,10 +356,6 @@ module.exports = function rust(options = {}) {
         options.serverPath = "";
     }
 
-    if (options.cargoArgs == null) {
-        options.cargoArgs = [];
-    }
-
     if (options.wasmOptArgs == null) {
         // TODO figure out better optimization options ?
         options.wasmOptArgs = ["-O"];
