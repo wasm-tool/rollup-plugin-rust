@@ -4,6 +4,7 @@ use web_sys::console;
 
 #[wasm_bindgen(module = "nop")]
 extern "C" {
+    #[wasm_bindgen(js_name = default)]
     fn nop();
 }
 
