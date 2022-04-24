@@ -1,0 +1,17 @@
+{
+  "private": true,
+  "name": "tests",
+  "author": "You <you@example.com>",
+  "version": "0.1.0",
+  "scripts": {
+    "test:foo": "cd src/foo && yarn install --force",
+    "test": "yarn test:foo && yarn install --force && rimraf dist/js && rollup --config"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^22.0.0",
+    "@rollup/plugin-node-resolve": "^13.2.1",
+    "@wasm-tool/rollup-plugin-rust": "file:..",
+    "rimraf": "^3.0.2",
+    "rollup": "^2.0.0"
+  }
+}

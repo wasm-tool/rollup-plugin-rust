@@ -1,0 +1,9 @@
+{
+  "private": true,
+  "name": "foo",
+  "author": "You <you@example.com>",
+  "version": "0.1.0",
+  "devDependencies": {
+    "nop": "^1.0.0"
+  }
+}
