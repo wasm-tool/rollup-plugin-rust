@@ -113,6 +113,7 @@ async function compile_js(cx, state, name, dir, out_dir, id, options) {
 
     const is_entry = cx.getModuleInfo(id).isEntry;
 
+    // This creates a mapping from the fake directory to the real directory
     state.fake_dirs.push({
         from: fake_dir,
         to: out_dir,
@@ -336,6 +337,22 @@ async function build(cx, state, source, id, options) {
 }
 
 
+// This checks if the file is fake or not
+function is_fake_id(id, importer) {
+    if (importer) {
+        if (id.startsWith("./.__rollup-plugin-rust__")) {
+            return true;
+
+        // TODO make this faster somehow ?
+        } else if (id[0] === "." && importer.includes("/.__rollup-plugin-rust__")) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+
 module.exports = function rust(options = {}) {
     // TODO should the filter affect the watching ?
     // TODO should the filter affect the Rust compilation ?
@@ -399,13 +416,17 @@ module.exports = function rust(options = {}) {
             }
         },
 
-        resolveId(id, importer, options) {
-            if (id.startsWith("./.__rollup-plugin-rust__") ||
-                (id.startsWith("./") &&
-                 importer &&
-                 importer.includes("/.__rollup-plugin-rust__"))) {
+        // This allows Rollup to resolve fake paths
+        resolveId(id, importer) {
+            if (is_fake_id(id, importer)) {
+                const path = $path.join($path.dirname(importer), id);
+
+                if (options.verbose) {
+                    debug(`Resolving path ${path}`);
+                }
+
                 return {
-                    id: $path.join($path.dirname(importer), id),
+                    id: path,
                     moduleSideEffects: false,
                 };
             }
@@ -413,12 +434,14 @@ module.exports = function rust(options = {}) {
             return null;
         },
 
+        // This maps the fake paths to real paths on disk and loads them
         load(id) {
             const len = state.fake_dirs.length;
 
             for (let i = 0; i < len; ++i) {
                 const dir = state.fake_dirs[i];
 
+                // If the path is fake...
                 if (id.startsWith(dir.from)) {
                     const path = dir.to + id.slice(dir.from.length);
 
