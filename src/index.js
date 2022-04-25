@@ -1,7 +1,7 @@
 const $path = require("path");
 const $toml = require("toml");
 const { createFilter } = require("rollup-pluginutils");
-const { posix_path, glob, rm, mv, read, exec, spawn, lock, debug } = require("./utils");
+const { glob, rm, mv, read, readString, exec, spawn, lock, debug } = require("./utils");
 const { run_wasm_bindgen } = require("./wasm-bindgen");
 
 
@@ -19,8 +19,7 @@ async function get_out_dir(dir, name, options) {
         debug(`Using target directory ${target_dir}`);
     }
 
-    // TODO use a randomly generated name ?
-    const out_dir = $path.resolve($path.join(dir, ".__rollup-plugin-rust__" + name));
+    const out_dir = $path.resolve($path.join(target_dir, "rollup-plugin-rust", name));
 
     const wasm_path = $path.resolve($path.join(
         target_dir,
@@ -99,8 +98,10 @@ async function run_wasm_opt(cx, out_dir, options) {
 
 
 async function compile_js(cx, state, name, dir, out_dir, id, options) {
-    // TODO better way to generate the path
-    const import_path = JSON.stringify("./" + posix_path($path.relative(dir, $path.join(out_dir, "index.js"))));
+    // TODO use a randomly generated name ?
+    const fake_dir = $path.resolve($path.join(dir, ".__rollup-plugin-rust__" + name));
+
+    const import_path = `"./.__rollup-plugin-rust__${name}/index.js"`;
 
     const wasm_path = $path.join(out_dir, "index_bg.wasm");
 
@@ -112,7 +113,10 @@ async function compile_js(cx, state, name, dir, out_dir, id, options) {
 
     const is_entry = cx.getModuleInfo(id).isEntry;
 
-    state.removeDirs.add(out_dir);
+    state.fake_dirs.push({
+        from: fake_dir,
+        to: out_dir,
+    });
 
     if (options.inlineWasm) {
         const base64_decode = `
@@ -200,7 +204,7 @@ async function compile_js(cx, state, name, dir, out_dir, id, options) {
             });
         }
 
-        state.fileIds.add(fileId);
+        state.file_ids.add(fileId);
 
         let import_wasm = `import.meta.ROLLUP_FILE_URL_${fileId}`;
 
@@ -338,8 +342,8 @@ module.exports = function rust(options = {}) {
     const filter = createFilter(options.include, options.exclude);
 
     const state = {
-        fileIds: new Set(),
-        removeDirs: new Set(),
+        file_ids: new Set(),
+        fake_dirs: [],
     };
 
     if (options.watchPatterns == null) {
@@ -373,18 +377,12 @@ module.exports = function rust(options = {}) {
         options.nodejs = false;
     }
 
-    function* removeDirs() {
-        for (dir of state.removeDirs) {
-            yield rm(dir);
-        }
-    }
-
     return {
         name: "rust",
 
         buildStart(rollup) {
-            state.fileIds.clear();
-            state.removeDirs.clear();
+            state.file_ids.clear();
+            state.fake_dirs.length = 0;
 
             if (options.wasmPackPath !== undefined) {
                 this.warn("The wasmPackPath option is deprecated and no longer works");
@@ -401,6 +399,40 @@ module.exports = function rust(options = {}) {
             }
         },
 
+        resolveId(id, importer, options) {
+            if (id.startsWith("./.__rollup-plugin-rust__") ||
+                (id.startsWith("./") &&
+                 importer &&
+                 importer.includes("/.__rollup-plugin-rust__"))) {
+                return {
+                    id: $path.join($path.dirname(importer), id),
+                    moduleSideEffects: false,
+                };
+            }
+
+            return null;
+        },
+
+        load(id) {
+            const len = state.fake_dirs.length;
+
+            for (let i = 0; i < len; ++i) {
+                const dir = state.fake_dirs[i];
+
+                if (id.startsWith(dir.from)) {
+                    const path = dir.to + id.slice(dir.from.length);
+
+                    if (options.verbose) {
+                        debug(`Loading file ${path}`);
+                    }
+
+                    return readString(path);
+                }
+            }
+
+            return null;
+        },
+
         transform(source, id) {
             if ($path.basename(id) === "Cargo.toml" && filter(id)) {
                 return build(this, state, source, id, options);
@@ -411,16 +443,12 @@ module.exports = function rust(options = {}) {
         },
 
         resolveFileUrl(info) {
-            if (state.fileIds.has(info.referenceId)) {
+            if (state.file_ids.has(info.referenceId)) {
                 return options.importHook(options.serverPath + info.fileName);
 
             } else {
                 return null;
             }
-        },
-
-        buildEnd(error) {
-            return Promise.all(removeDirs());
         },
     };
 };

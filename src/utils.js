@@ -147,6 +147,22 @@ function read(path) {
 exports.read = read;
 
 
+function readString(path) {
+    return new Promise(function (resolve, reject) {
+        $fs.readFile(path, { encoding: "utf8" }, function (err, file) {
+            if (err) {
+                reject(err);
+
+            } else {
+                resolve(file);
+            }
+        });
+    });
+}
+
+exports.readString = readString;
+
+
 function exec(cmd, options) {
     return new Promise((resolve, reject) => {
         $child.exec(cmd, options, (err, stdout, stderr) => {

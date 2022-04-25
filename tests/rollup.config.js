@@ -1,4 +1,4 @@
-import rust from "@wasm-tool/rollup-plugin-rust";
+const rust = require("..");
 import { nodeResolve } from "@rollup/plugin-node-resolve";
 import commonjs from "@rollup/plugin-commonjs";
 
@@ -20,6 +20,7 @@ export default {
         rust({
             serverPath: "js/",
             wasmBindgenArgs: ["--debug", "--keep-debug"],
+            verbose: true,
         }),
     ],
 };

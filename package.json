@@ -8,6 +8,11 @@
   "homepage": "https://github.com/wasm-tool/rollup-plugin-rust#readme",
   "bugs": "https://github.com/wasm-tool/rollup-plugin-rust/issues",
   "main": "src/index.js",
+  "scripts": {
+    "test:foo": "cd tests/src/foo && yarn install",
+    "test": "yarn test:foo && cd tests && rimraf dist/js && rollup --config",
+    "serve": "live-server tests/dist"
+  },
   "directories": {
     "example": "example"
   },
@@ -30,5 +35,11 @@
     "rollup-pluginutils": "^2.8.2",
     "tar": "^6.1.11",
     "toml": "^3.0.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^22.0.0",
+    "@rollup/plugin-node-resolve": "^13.2.1",
+    "live-server": "^1.2.1",
+    "rollup": "^2.70.2"
   }
 }
