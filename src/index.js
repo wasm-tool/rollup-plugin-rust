@@ -344,7 +344,7 @@ function is_fake_id(id, importer) {
             return true;
 
         // TODO make this faster somehow ?
-        } else if (id[0] === "." && importer.includes("/.__rollup-plugin-rust__")) {
+        } else if (id[0] === "." && importer.includes($path.sep + ".__rollup-plugin-rust__")) {
             return true;
         }
     }
