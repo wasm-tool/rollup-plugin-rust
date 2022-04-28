@@ -11,7 +11,8 @@
   "scripts": {
     "test:foo": "cd tests/src/foo && yarn install",
     "test": "yarn test:foo && cd tests && rimraf dist/js && rollup --config",
-    "serve": "live-server tests/dist"
+    "test:watch": "yarn test:foo && cd tests && rimraf dist/js && rollup --config --watch",
+    "test:serve": "live-server tests/dist"
   },
   "directories": {
     "example": "example"

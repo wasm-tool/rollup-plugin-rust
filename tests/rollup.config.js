@@ -6,6 +6,7 @@ export default {
     input: {
         foo: "./src/foo.js",
         bar: "./src/bar.js",
+        qux: "./src/foo/Cargo.toml",
     },
     output: {
         dir: "dist/js",

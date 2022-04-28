@@ -5,37 +5,20 @@ const { glob, rm, mv, read, readString, exec, spawn, lock, debug } = require("./
 const { run_wasm_bindgen } = require("./wasm-bindgen");
 
 
-async function get_target_dir(dir) {
-    // TODO make this faster somehow ?
-    const metadata = await exec("cargo metadata --format-version 1 --no-deps --color never", { cwd: dir });
-    return JSON.parse(metadata).target_directory;
-}
+const PREFIX = "./.__rollup-plugin-rust__";
+const ENTRY_SUFFIX = "?rollup-plugin-rust-entry";
 
 
-async function get_out_dir(dir, name, options) {
-    const target_dir = await get_target_dir(dir);
+async function get_target_dir(state, dir) {
+    let target_dir = state.target_dir_cache[dir];
 
-    if (options.verbose) {
-        debug(`Using target directory ${target_dir}`);
+    if (target_dir == null) {
+        // TODO make this faster somehow ?
+        const metadata = await exec("cargo metadata --format-version 1 --no-deps --color never", { cwd: dir });
+        target_dir = state.target_dir_cache[dir] = JSON.parse(metadata).target_directory;
     }
 
-    const out_dir = $path.resolve($path.join(target_dir, "rollup-plugin-rust", name));
-
-    const wasm_path = $path.resolve($path.join(
-        target_dir,
-        "wasm32-unknown-unknown",
-        (options.debug ? "debug" : "release"),
-        name + ".wasm"
-    ));
-
-    if (options.verbose) {
-        debug(`Using rustc output ${wasm_path}`);
-        debug(`Using output directory ${out_dir}`);
-    }
-
-    await rm(out_dir);
-
-    return { out_dir, wasm_path };
+    return target_dir;
 }
 
 
@@ -97,27 +80,110 @@ async function run_wasm_opt(cx, out_dir, options) {
 }
 
 
-async function compile_js(cx, state, name, dir, out_dir, id, options) {
-    // TODO use a randomly generated name ?
-    const fake_dir = $path.resolve($path.join(dir, ".__rollup-plugin-rust__" + name));
-
-    const import_path = `"./.__rollup-plugin-rust__${name}/index.js"`;
-
+async function load_wasm(out_dir, options) {
     const wasm_path = $path.join(out_dir, "index_bg.wasm");
 
     if (options.verbose) {
         debug(`Looking for wasm at ${wasm_path}`);
     }
 
-    const wasm = await read(wasm_path);
+    return await read(wasm_path);
+}
 
-    const is_entry = cx.getModuleInfo(id).isEntry;
 
-    // This creates a mapping from the fake directory to the real directory
-    state.fake_dirs.push({
-        from: fake_dir,
-        to: out_dir,
-    });
+async function compile_rust(cx, dir, id, target_dir, source, options) {
+    const toml = $toml.parse(source);
+
+    validate_toml(toml);
+
+    // TODO does it need to do more transformations on the name ?
+    const name = toml.package.name.replace(/\-/g, "_");
+
+    try {
+        // TODO maybe it can run `cargo fetch` without locking ?
+        return await lock(async function () {
+            if (options.verbose) {
+                debug(`Compiling ${id}`);
+                debug(`Using target directory ${target_dir}`);
+            }
+
+            await run_cargo(dir, options);
+
+            const wasm_path = $path.resolve($path.join(
+                target_dir,
+                "wasm32-unknown-unknown",
+                (options.debug ? "debug" : "release"),
+                name + ".wasm"
+            ));
+
+            const out_dir = $path.resolve($path.join(target_dir, "rollup-plugin-rust", name));
+
+            if (options.verbose) {
+                debug(`Using rustc output ${wasm_path}`);
+                debug(`Using output directory ${out_dir}`);
+            }
+
+            await rm(out_dir);
+
+            await run_wasm_bindgen(dir, wasm_path, out_dir, options);
+
+            if (!options.debug) {
+                await run_wasm_opt(cx, out_dir, options);
+            }
+
+            const wasm = await load_wasm(out_dir, options);
+
+            return { name, wasm };
+        });
+
+    } catch (e) {
+        if (options.verbose) {
+            throw e;
+
+        } else {
+            const e = new Error("Rust compilation failed");
+            e.stack = null;
+            throw e;
+        }
+    }
+}
+
+
+async function watch_files(cx, dir, options) {
+    if (options.watch) {
+        const matches = await Promise.all(options.watchPatterns.map(function (pattern) {
+            return glob(pattern, dir);
+        }));
+
+        // TODO deduplicate matches ?
+        matches.forEach(function (files) {
+            files.forEach(function (file) {
+                cx.addWatchFile(file);
+            });
+        });
+    }
+}
+
+
+async function build(cx, dir, id, target_dir, options) {
+    const source = await readString(id);
+
+    const [output] = await Promise.all([
+        compile_rust(cx, dir, id, target_dir, source, options),
+        watch_files(cx, dir, options),
+    ]);
+
+    return output;
+}
+
+
+async function compile_js(cx, state, name, wasm, is_entry, out_dir, options) {
+    const real_path = $path.join(out_dir, "index.js");
+
+    // This returns a fake file path, this ensures that the directory is the
+    // same as the Cargo.toml file, which is necessary in order to make npm
+    // package imports work correctly.
+    const import_path = `"${PREFIX}${name}/index.js"`;
 
     if (options.inlineWasm) {
         const base64_decode = `
@@ -162,6 +228,9 @@ async function compile_js(cx, state, name, dir, out_dir, id, options) {
                     init(wasm_code).catch(console.error);
                 `,
                 map: { mappings: '' },
+                meta: {
+                    "rollup-plugin-rust": { root: false, real_path }
+                },
             };
 
         } else {
@@ -180,6 +249,9 @@ async function compile_js(cx, state, name, dir, out_dir, id, options) {
                 `,
                 map: { mappings: '' },
                 moduleSideEffects: false,
+                meta: {
+                    "rollup-plugin-rust": { root: false, real_path }
+                },
             };
         }
 
@@ -238,6 +310,9 @@ async function compile_js(cx, state, name, dir, out_dir, id, options) {
                     init(${import_wasm}).catch(console.error);
                 `,
                 map: { mappings: '' },
+                meta: {
+                    "rollup-plugin-rust": { root: false, real_path }
+                },
             };
 
         } else {
@@ -265,91 +340,28 @@ async function compile_js(cx, state, name, dir, out_dir, id, options) {
                 `,
                 map: { mappings: '' },
                 moduleSideEffects: false,
+                meta: {
+                    "rollup-plugin-rust": { root: false, real_path }
+                },
             };
         }
     }
 }
 
 
-async function compile_rust(cx, state, dir, source, id, options) {
-    const toml = $toml.parse(source);
+async function load_cargo_toml(cx, state, id, is_entry, meta, options) {
+    let result = state.cargo_toml_cache[id];
 
-    validate_toml(toml);
-
-    // TODO does it need to do more transformations on the name ?
-    const name = toml.package.name.replace(/\-/g, "_");
-
-    try {
-        // TODO what if it tries to build the same crate multiple times ?
-        // TODO maybe it can run `cargo fetch` without locking ?
-        return await lock(async function () {
-            await run_cargo(dir, options);
-
-            const { wasm_path, out_dir } = await get_out_dir(dir, name, options);
-
-            await run_wasm_bindgen(dir, wasm_path, out_dir, options);
-
-            if (!options.debug) {
-                await run_wasm_opt(cx, out_dir, options);
-            }
-
-            return compile_js(cx, state, name, dir, out_dir, id, options);
-        });
-
-    } catch (e) {
-        if (options.verbose) {
-            throw e;
-
-        } else {
-            const e = new Error("Rust compilation failed");
-            e.stack = null;
-            throw e;
-        }
-    }
-}
-
-
-async function watch_files(cx, dir, options) {
-    if (options.watch) {
-        const matches = await Promise.all(options.watchPatterns.map(function (pattern) {
-            return glob(pattern, dir);
-        }));
-
-        // TODO deduplicate matches ?
-        matches.forEach(function (files) {
-            files.forEach(function (file) {
-                cx.addWatchFile(file);
-            });
-        });
-    }
-}
-
-
-async function build(cx, state, source, id, options) {
-    const dir = $path.dirname(id);
-
-    const [output] = await Promise.all([
-        compile_rust(cx, state, dir, source, id, options),
-        watch_files(cx, dir, options),
-    ]);
-
-    return output;
-}
-
-
-// This checks if the file is fake or not
-function is_fake_id(id, importer) {
-    if (importer) {
-        if (id.startsWith("./.__rollup-plugin-rust__")) {
-            return true;
-
-        // TODO make this faster somehow ?
-        } else if (id[0] === "." && importer.includes("/.__rollup-plugin-rust__")) {
-            return true;
-        }
+    if (result == null) {
+        const dir = $path.dirname(id);
+        result = state.cargo_toml_cache[id] = build(cx, dir, id, meta.target_dir, options);
     }
 
-    return false;
+    result = await result;
+
+    const out_dir = $path.join(meta.target_dir, "rollup-plugin-rust", result.name);
+
+    return compile_js(cx, state, result.name, result.wasm, is_entry, out_dir, options);
 }
 
 
@@ -360,7 +372,8 @@ module.exports = function rust(options = {}) {
 
     const state = {
         file_ids: new Set(),
-        fake_dirs: [],
+        target_dir_cache: {},
+        cargo_toml_cache: {},
     };
 
     if (options.watchPatterns == null) {
@@ -399,7 +412,8 @@ module.exports = function rust(options = {}) {
 
         buildStart(rollup) {
             state.file_ids.clear();
-            state.fake_dirs.length = 0;
+            state.target_dir_cache = {};
+            state.cargo_toml_cache = {};
 
             if (options.wasmPackPath !== undefined) {
                 this.warn("The wasmPackPath option is deprecated and no longer works");
@@ -417,52 +431,95 @@ module.exports = function rust(options = {}) {
         },
 
         // This allows Rollup to resolve fake paths
-        resolveId(id, importer) {
-            if (is_fake_id(id, importer)) {
-                const path = $path.join($path.dirname(importer), id);
-
-                if (options.verbose) {
-                    debug(`Resolving path ${path}`);
-                }
-
-                return {
-                    id: path,
-                    moduleSideEffects: false,
-                };
-            }
-
-            return null;
-        },
-
-        // This maps the fake paths to real paths on disk and loads them
-        load(id) {
-            const len = state.fake_dirs.length;
-
-            for (let i = 0; i < len; ++i) {
-                const dir = state.fake_dirs[i];
-
-                // If the path is fake...
-                if (id.startsWith(dir.from)) {
-                    const path = dir.to + id.slice(dir.from.length);
-
-                    if (options.verbose) {
-                        debug(`Loading file ${path}`);
-                    }
-
-                    return readString(path);
-                }
-            }
-
-            return null;
-        },
-
-        transform(source, id) {
+        resolveId(id, importer, info) {
             if ($path.basename(id) === "Cargo.toml" && filter(id)) {
-                return build(this, state, source, id, options);
+                const path = (importer ? $path.resolve($path.dirname(importer), id) : $path.resolve(id));
+                const dir = $path.dirname(path);
 
-            } else {
-                return null;
+                return get_target_dir(state, dir).then((target_dir) => {
+                    const meta = (info.custom && info.custom["rollup-plugin-rust"]) || {};
+
+                    meta.target_dir = target_dir;
+                    meta.root = true;
+
+                    if (info.isEntry) {
+                        return {
+                            id: `${path}${ENTRY_SUFFIX}`,
+                            meta: {
+                                "rollup-plugin-rust": meta
+                            }
+                        };
+
+                    } else {
+                        return {
+                            id: path,
+                            moduleSideEffects: false,
+                            meta: {
+                                "rollup-plugin-rust": meta
+                            }
+                        };
+                    }
+                });
+
+            // Rewrites the fake file paths to real file paths
+            } else if (importer && id[0] === ".") {
+                const info = this.getModuleInfo(importer);
+
+                if (info && info.meta) {
+                    const meta = info.meta["rollup-plugin-rust"];
+
+                    if (meta && !meta.root) {
+                        // TODO maybe use resolve ?
+                        const path = $path.join($path.dirname(importer), id);
+
+                        const real_path = (id.startsWith(PREFIX)
+                            ? meta.real_path
+                            : $path.join($path.dirname(meta.real_path), id));
+
+                        return {
+                            id: path,
+                            meta: {
+                                "rollup-plugin-rust": {
+                                    root: false,
+                                    real_path,
+                                }
+                            }
+                        };
+                    }
+                }
             }
+
+            return null;
+        },
+
+        load(id) {
+            const info = this.getModuleInfo(id);
+
+            if (info && info.meta) {
+                const meta = info.meta["rollup-plugin-rust"];
+
+                if (meta) {
+                    if (meta.root) {
+                        // This compiles the Cargo.toml
+                        if (id.endsWith(ENTRY_SUFFIX)) {
+                            return load_cargo_toml(this, state, id.slice(0, -ENTRY_SUFFIX.length), true, meta, options);
+
+                        } else {
+                            return load_cargo_toml(this, state, id, false, meta, options);
+                        }
+
+                    } else {
+                        if (options.verbose) {
+                            debug(`Loading file ${meta.real_path}`);
+                        }
+
+                        // This maps the fake paths to real paths on disk and loads them
+                        return readString(meta.real_path);
+                    }
+                }
+            }
+
+            return null;
         },
 
         resolveFileUrl(info) {
