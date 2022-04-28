@@ -133,7 +133,7 @@ async function compile_rust(cx, dir, id, target_dir, source, options) {
 
             const wasm = await load_wasm(out_dir, options);
 
-            return { name, wasm };
+            return { name, wasm, out_dir };
         });
 
     } catch (e) {
@@ -165,8 +165,14 @@ async function watch_files(cx, dir, options) {
 }
 
 
-async function build(cx, dir, id, target_dir, options) {
-    const source = await readString(id);
+async function build(cx, state, id, options) {
+    const dir = $path.dirname(id);
+
+    const [target_dir, source] = await Promise.all([
+        // TODO does this need to be behind the lock too ?
+        get_target_dir(state, dir),
+        readString(id),
+    ]);
 
     const [output] = await Promise.all([
         compile_rust(cx, dir, id, target_dir, source, options),
@@ -353,15 +359,12 @@ async function load_cargo_toml(cx, state, id, is_entry, meta, options) {
     let result = state.cargo_toml_cache[id];
 
     if (result == null) {
-        const dir = $path.dirname(id);
-        result = state.cargo_toml_cache[id] = build(cx, dir, id, meta.target_dir, options);
+        result = state.cargo_toml_cache[id] = build(cx, state, id, options);
     }
 
     result = await result;
 
-    const out_dir = $path.join(meta.target_dir, "rollup-plugin-rust", result.name);
-
-    return compile_js(cx, state, result.name, result.wasm, is_entry, out_dir, options);
+    return compile_js(cx, state, result.name, result.wasm, is_entry, result.out_dir, options);
 }
 
 
@@ -430,38 +433,31 @@ module.exports = function rust(options = {}) {
             }
         },
 
-        // This allows Rollup to resolve fake paths
         resolveId(id, importer, info) {
             if ($path.basename(id) === "Cargo.toml" && filter(id)) {
                 const path = (importer ? $path.resolve($path.dirname(importer), id) : $path.resolve(id));
-                const dir = $path.dirname(path);
 
-                return get_target_dir(state, dir).then((target_dir) => {
-                    const meta = (info.custom && info.custom["rollup-plugin-rust"]) || {};
+                // This adds a suffix so that the load hook can reliably detect whether it's an entry or not.
+                // This is needed because isEntry is ONLY reliable inside of resolveId.
+                if (info.isEntry) {
+                    return {
+                        id: `${path}${ENTRY_SUFFIX}`,
+                        meta: {
+                            "rollup-plugin-rust": { root: true }
+                        }
+                    };
 
-                    meta.target_dir = target_dir;
-                    meta.root = true;
+                } else {
+                    return {
+                        id: path,
+                        moduleSideEffects: false,
+                        meta: {
+                            "rollup-plugin-rust": { root: true }
+                        }
+                    };
+                }
 
-                    if (info.isEntry) {
-                        return {
-                            id: `${path}${ENTRY_SUFFIX}`,
-                            meta: {
-                                "rollup-plugin-rust": meta
-                            }
-                        };
-
-                    } else {
-                        return {
-                            id: path,
-                            moduleSideEffects: false,
-                            meta: {
-                                "rollup-plugin-rust": meta
-                            }
-                        };
-                    }
-                });
-
-            // Rewrites the fake file paths to real file paths
+            // Rewrites the fake file paths to real file paths.
             } else if (importer && id[0] === ".") {
                 const info = this.getModuleInfo(importer);
 
@@ -513,7 +509,7 @@ module.exports = function rust(options = {}) {
                             debug(`Loading file ${meta.real_path}`);
                         }
 
-                        // This maps the fake paths to real paths on disk and loads them
+                        // This maps the fake path to a real path on disk and loads it
                         return readString(meta.real_path);
                     }
                 }
