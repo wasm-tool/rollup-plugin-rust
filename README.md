@@ -105,7 +105,8 @@ These are the default options:
 ```js
 rust({
     // Directory on your server where the .wasm files will be loaded from.
-    // This is prepended to the URL, so you should put a / at the end of the directory, e.g. "/foo/".
+    // This is prepended to the URL, so you should put a / at the end of the directory,
+    // for example "/foo/".
     serverPath: "",
 
     // Whether the code will be run in Node.js or not.
@@ -138,11 +139,12 @@ rust({
     // Arguments passed to `wasm-opt`.
     wasmOptArgs: ["-O"],
 
-    // Which files it should watch in watch mode. This is relative to the crate directory.
-    // Supports all of the glob syntax.
+    // Which files it should watch in watch mode. This is relative to the Cargo.toml file.
+    // Supports all of the glob syntax: https://www.npmjs.com/package/glob
     watchPatterns: ["src/**"],
 
-    // Allows you to customize the behavior for loading the .wasm file, this is for advanced users only!
+    // Allows you to customize the behavior for loading the .wasm file,
+    // this is for advanced users only!
     importHook: function (path) { return JSON.stringify(path); },
 })
 ```
