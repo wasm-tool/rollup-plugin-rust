@@ -14,14 +14,14 @@ export default {
         sourcemap: true,
     },
     plugins: [
+        nodeResolve(),
+
+        commonjs(),
+
         rust({
             serverPath: "js/",
             wasmBindgenArgs: ["--debug", "--keep-debug"],
             verbose: true,
         }),
-
-        nodeResolve(),
-
-        commonjs(),
     ],
 };
