@@ -146,6 +146,35 @@ rust({
     // Allows you to customize the behavior for loading the .wasm file,
     // this is for advanced users only!
     importHook: function (path) { return JSON.stringify(path); },
+
+    // These options should not be relied upon, they can change or disappear in future versions.
+    experimental: {
+        // Changes the way that the modules are generated. Normally you import Rust like this:
+        //
+        //     import wasm from "./path/to/Cargo.toml";
+        //
+        //     async function loadWasm() {
+        //         const exports = await wasm();
+        //
+        //         // Use functions which were exported from Rust...
+        //     }
+        //
+        // But now you import Rust like this:
+        //
+        //     import { foo, bar } from "./path/to/Cargo.toml";
+        //
+        //     // Use functions which were exported from Rust...
+        //
+        // You might need to set the Rollup `format` to "es" or "system".
+        directExports: false,
+
+        // Whether the Wasm will be initialized synchronously or not.
+        //
+        // In the browser you can only use synchronous loading inside of Workers.
+        //
+        // This requires `inlineWasm: true`.
+        synchronous: false,
+    },
 })
 ```
 

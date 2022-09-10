@@ -183,6 +183,209 @@ async function build(cx, state, id, options) {
 }
 
 
+function compile_js_inline(options, import_path, real_path, wasm, is_entry) {
+    let export_code;
+
+    if (!is_entry && options.experimental.directExports) {
+        export_code = `export * from ${import_path};`;
+
+    } else {
+        export_code = "";
+    }
+
+
+    let main_code;
+    let sideEffects;
+
+    if (options.experimental.synchronous) {
+        if (is_entry || options.experimental.directExports) {
+            sideEffects = true;
+            main_code = `exports.initSync(wasm_code);`
+
+        } else {
+            sideEffects = false;
+            main_code = `export default () => {
+                exports.initSync(wasm_code);
+                return exports;
+            };`;
+        }
+
+    } else {
+        if (options.experimental.directExports) {
+            sideEffects = true;
+            main_code = `await exports.default(wasm_code);`;
+
+        } else if (is_entry) {
+            sideEffects = true;
+            main_code = `exports.default(wasm_code).catch(console.error);`
+
+        } else {
+            sideEffects = false;
+            main_code = `export default async () => {
+                await exports.default(wasm_code);
+                return exports;
+            };`;
+        }
+    }
+
+
+    const wasm_string = JSON.stringify(wasm.toString("base64"));
+
+    const code = `
+        ${export_code}
+        import * as exports from ${import_path};
+
+        const base64codes = [62,0,0,0,63,52,53,54,55,56,57,58,59,60,61,0,0,0,0,0,0,0,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,0,0,0,0,0,0,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51];
+
+        function getBase64Code(charCode) {
+            return base64codes[charCode - 43];
+        }
+
+        function base64_decode(str) {
+            let missingOctets = str.endsWith("==") ? 2 : str.endsWith("=") ? 1 : 0;
+            let n = str.length;
+            let result = new Uint8Array(3 * (n / 4));
+            let buffer;
+
+            for (let i = 0, j = 0; i < n; i += 4, j += 3) {
+                buffer =
+                    getBase64Code(str.charCodeAt(i)) << 18 |
+                    getBase64Code(str.charCodeAt(i + 1)) << 12 |
+                    getBase64Code(str.charCodeAt(i + 2)) << 6 |
+                    getBase64Code(str.charCodeAt(i + 3));
+                result[j] = buffer >> 16;
+                result[j + 1] = (buffer >> 8) & 0xFF;
+                result[j + 2] = buffer & 0xFF;
+            }
+
+            return result.subarray(0, result.length - missingOctets);
+        }
+
+        const wasm_code = base64_decode(${wasm_string});
+
+        ${main_code}
+    `;
+
+
+    return {
+        code,
+        map: { mappings: '' },
+        moduleSideEffects: sideEffects,
+        meta: {
+            "rollup-plugin-rust": { root: false, real_path }
+        },
+    };
+}
+
+
+function compile_js_load(cx, state, options, import_path, real_path, name, wasm, is_entry) {
+    let fileId;
+
+    if (options.outDir == null) {
+        fileId = cx.emitFile({
+            type: "asset",
+            source: wasm,
+            name: name + ".wasm"
+        });
+
+    } else {
+        cx.warn("The outDir option is deprecated, use output.assetFileNames instead");
+
+        const wasm_name = $path.posix.join(options.outDir, name + ".wasm");
+
+        fileId = cx.emitFile({
+            type: "asset",
+            source: wasm,
+            fileName: wasm_name
+        });
+    }
+
+    state.file_ids.add(fileId);
+
+
+    let wasm_path = `import.meta.ROLLUP_FILE_URL_${fileId}`;
+
+    let prelude = "";
+
+    if (options.nodejs) {
+        prelude = `
+        function loadFile(url) {
+            return new Promise((resolve, reject) => {
+                require("fs").readFile(url, (err, data) => {
+                    if (err) {
+                        reject(err);
+
+                    } else {
+                        resolve(data);
+                    }
+                });
+            });
+        }`;
+
+        wasm_path = `loadFile(${wasm_path})`;
+    }
+
+
+    let export_code = "";
+
+    if (!is_entry && options.experimental.directExports) {
+        export_code = `export * from ${import_path};`;
+    }
+
+
+    let main_code;
+    let sideEffects;
+
+    if (options.experimental.synchronous) {
+        throw new Error("synchronous option can only be used with inlineWasm: true");
+
+    } else {
+        if (options.experimental.directExports) {
+            sideEffects = true;
+            main_code = `await exports.default(${wasm_path});`;
+
+        } else if (is_entry) {
+            sideEffects = true;
+            main_code = `exports.default(${wasm_path}).catch(console.error);`
+
+        } else {
+            sideEffects = false;
+            main_code = `export default async (opt = {}) => {
+                let {importHook, serverPath} = opt;
+
+                let path = ${wasm_path};
+
+                if (serverPath != null) {
+                    path = serverPath + /[^\\/\\\\]*$/.exec(path)[0];
+                }
+
+                if (importHook != null) {
+                    path = importHook(path);
+                }
+
+                await exports.default(path);
+                return exports;
+            };`;
+        }
+    }
+
+
+    return {
+        code: `
+            ${export_code}
+            import * as exports from ${import_path};
+            ${prelude}
+            ${main_code}
+        `,
+        map: { mappings: '' },
+        moduleSideEffects: sideEffects,
+        meta: {
+            "rollup-plugin-rust": { root: false, real_path }
+        },
+    };
+}
+
+
 async function compile_js(cx, state, name, wasm, is_entry, out_dir, options) {
     const real_path = $path.join(out_dir, "index.js");
 
@@ -192,165 +395,10 @@ async function compile_js(cx, state, name, wasm, is_entry, out_dir, options) {
     const import_path = `"${PREFIX}${name}/index.js"`;
 
     if (options.inlineWasm) {
-        const base64_decode = `
-            const base64codes = [62,0,0,0,63,52,53,54,55,56,57,58,59,60,61,0,0,0,0,0,0,0,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,0,0,0,0,0,0,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51];
-
-            function getBase64Code(charCode) {
-                return base64codes[charCode - 43];
-            }
-
-            function base64_decode(str) {
-                let missingOctets = str.endsWith("==") ? 2 : str.endsWith("=") ? 1 : 0;
-                let n = str.length;
-                let result = new Uint8Array(3 * (n / 4));
-                let buffer;
-
-                for (let i = 0, j = 0; i < n; i += 4, j += 3) {
-                    buffer =
-                        getBase64Code(str.charCodeAt(i)) << 18 |
-                        getBase64Code(str.charCodeAt(i + 1)) << 12 |
-                        getBase64Code(str.charCodeAt(i + 2)) << 6 |
-                        getBase64Code(str.charCodeAt(i + 3));
-                    result[j] = buffer >> 16;
-                    result[j + 1] = (buffer >> 8) & 0xFF;
-                    result[j + 2] = buffer & 0xFF;
-                }
-
-                return result.subarray(0, result.length - missingOctets);
-            }
-        `;
-
-        const wasm_string = JSON.stringify(wasm.toString("base64"));
-
-        if (is_entry) {
-            return {
-                code: `
-                    import init from ${import_path};
-
-                    ${base64_decode}
-
-                    const wasm_code = base64_decode(${wasm_string});
-
-                    init(wasm_code).catch(console.error);
-                `,
-                map: { mappings: '' },
-                meta: {
-                    "rollup-plugin-rust": { root: false, real_path }
-                },
-            };
-
-        } else {
-            return {
-                code: `
-                    import * as exports from ${import_path};
-
-                    ${base64_decode}
-
-                    const wasm_code = base64_decode(${wasm_string});
-
-                    export default async () => {
-                        await exports.default(wasm_code);
-                        return exports;
-                    };
-                `,
-                map: { mappings: '' },
-                moduleSideEffects: false,
-                meta: {
-                    "rollup-plugin-rust": { root: false, real_path }
-                },
-            };
-        }
+        return compile_js_inline(options, import_path, real_path, wasm, is_entry);
 
     } else {
-        let fileId;
-
-        if (options.outDir == null) {
-            fileId = cx.emitFile({
-                type: "asset",
-                source: wasm,
-                name: name + ".wasm"
-            });
-
-        } else {
-            cx.warn("The outDir option is deprecated, use output.assetFileNames instead");
-
-            const wasm_name = $path.posix.join(options.outDir, name + ".wasm");
-
-            fileId = cx.emitFile({
-                type: "asset",
-                source: wasm,
-                fileName: wasm_name
-            });
-        }
-
-        state.file_ids.add(fileId);
-
-        let import_wasm = `import.meta.ROLLUP_FILE_URL_${fileId}`;
-
-        let prelude = "";
-
-        if (options.nodejs) {
-            prelude = `
-            function loadFile(url) {
-                return new Promise((resolve, reject) => {
-                    require("fs").readFile(url, (err, data) => {
-                        if (err) {
-                            reject(err);
-
-                        } else {
-                            resolve(data);
-                        }
-                    });
-                });
-            }`;
-
-            import_wasm = `loadFile(${import_wasm})`;
-        }
-
-        if (is_entry) {
-            return {
-                code: `
-                    import init from ${import_path};
-                    ${prelude}
-
-                    init(${import_wasm}).catch(console.error);
-                `,
-                map: { mappings: '' },
-                meta: {
-                    "rollup-plugin-rust": { root: false, real_path }
-                },
-            };
-
-        } else {
-            return {
-                code: `
-                    import * as exports from ${import_path};
-                    ${prelude}
-
-                    export default async (opt = {}) => {
-                        let {importHook, serverPath} = opt;
-
-                        let path = ${import_wasm};
-
-                        if (serverPath != null) {
-                            path = serverPath + /[^\\/\\\\]*$/.exec(path)[0];
-                        }
-
-                        if (importHook != null) {
-                            path = importHook(path);
-                        }
-
-                        await exports.default(path);
-                        return exports;
-                    };
-                `,
-                map: { mappings: '' },
-                moduleSideEffects: false,
-                meta: {
-                    "rollup-plugin-rust": { root: false, real_path }
-                },
-            };
-        }
+        return compile_js_load(cx, state, options, import_path, real_path, name, wasm, is_entry);
     }
 }
 
@@ -408,6 +456,18 @@ module.exports = function rust(options = {}) {
 
     if (options.nodejs == null) {
         options.nodejs = false;
+    }
+
+    if (options.experimental == null) {
+        options.experimental = {};
+    }
+
+    if (options.experimental.directExports == null) {
+        options.experimental.directExports = false;
+    }
+
+    if (options.experimental.synchronous == null) {
+        options.experimental.synchronous = false;
     }
 
     return {
