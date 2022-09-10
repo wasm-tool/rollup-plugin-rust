@@ -1,6 +1,6 @@
 const $path = require("path");
 const $toml = require("toml");
-const { createFilter } = require("rollup-pluginutils");
+const { createFilter } = require("@rollup/pluginutils");
 const { glob, rm, mv, read, readString, exec, spawn, lock, debug } = require("./utils");
 const { run_wasm_bindgen } = require("./wasm-bindgen");
 
