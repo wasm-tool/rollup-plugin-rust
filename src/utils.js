@@ -163,6 +163,20 @@ function readString(path) {
 exports.readString = readString;
 
 
+function getEnv(name, fallback) {
+    const value = process.env[name];
+
+    if (value == null) {
+        return fallback;
+
+    } else {
+        return value;
+    }
+}
+
+exports.getEnv = getEnv;
+
+
 function exec(cmd, options) {
     return new Promise((resolve, reject) => {
         $child.exec(cmd, options, (err, stdout, stderr) => {

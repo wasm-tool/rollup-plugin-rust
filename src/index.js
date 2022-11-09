@@ -1,7 +1,7 @@
 const $path = require("path");
 const $toml = require("toml");
 const { createFilter } = require("@rollup/pluginutils");
-const { glob, rm, mv, read, readString, exec, spawn, lock, debug } = require("./utils");
+const { glob, rm, mv, read, readString, exec, spawn, lock, debug, getEnv } = require("./utils");
 const { run_wasm_bindgen } = require("./wasm-bindgen");
 
 
@@ -13,8 +13,9 @@ async function get_target_dir(state, dir) {
     let target_dir = state.target_dir_cache[dir];
 
     if (target_dir == null) {
+        const cargo_exec = getEnv("CARGO_BIN", "cargo");
         // TODO make this faster somehow ?
-        const metadata = await exec("cargo metadata --format-version 1 --no-deps --color never", { cwd: dir });
+        const metadata = await exec(`${cargo_exec} metadata --format-version 1 --no-deps --color never`, { cwd: dir });
         target_dir = state.target_dir_cache[dir] = JSON.parse(metadata).target_directory;
     }
 
@@ -32,6 +33,8 @@ function validate_toml(toml) {
 
 
 async function run_cargo(dir, options) {
+    const cargo_exec = getEnv("CARGO_BIN", "cargo");
+
     let cargo_args = [
         "build",
         "--lib",
@@ -50,7 +53,7 @@ async function run_cargo(dir, options) {
         debug(`Running cargo ${cargo_args.join(" ")}`);
     }
 
-    await spawn("cargo", cargo_args, { cwd: dir, stdio: "inherit" });
+    await spawn(cargo_exec, cargo_args, { cwd: dir, stdio: "inherit" });
 }
 
 
@@ -60,7 +63,7 @@ async function run_wasm_opt(cx, out_dir, options) {
     const tmp = "wasm_opt.wasm";
 
     // Needed to make wasm-opt work on Windows
-    const wasm_opt_command = (process.platform === "win32" ? "wasm-opt.cmd" : "wasm-opt");
+    const wasm_opt_command = getEnv("WASM_OPT_BIN", (process.platform === "win32" ? "wasm-opt.cmd" : "wasm-opt"));
 
     const wasm_opt_args = [path, "--output", tmp].concat(options.wasmOptArgs);
 

@@ -191,3 +191,13 @@ rust({
 ```
 
 This is necessary because extension files are put into a separate URL namespace, so you must use `chrome.runtime.getURL` to get the correct URL.
+
+### Environment variables
+
+You can use the following environment variables to customize some aspects of this plugin:
+
+* `CARGO_BIN` is the path to the `cargo` executable.
+* `WASM_BINDGEN_BIN` is the path to the `wasm-bindgen` executable.
+* `WASM_OPT_BIN` is the path to the `wasm-opt` executable.
+
+If not specified, they will use a good default value, so you shouldn't need to change them, this is for advanced uses only.
