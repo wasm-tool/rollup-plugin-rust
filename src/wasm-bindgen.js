@@ -11,7 +11,12 @@ function wasm_bindgen_name(version) {
     case "darwin":
         return `wasm-bindgen-${version}-x86_64-apple-darwin`;
     default:
-        return `wasm-bindgen-${version}-x86_64-unknown-linux-musl`;
+  	switch (process.arch) {
+	    case "arm64":
+                return `wasm-bindgen-${version}-aarch64-unknown-linux-gnu`;
+ 	    default:
+                return `wasm-bindgen-${version}-x86_64-unknown-linux-musl`;
+	}
     }
 }
 
