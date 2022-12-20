@@ -97,6 +97,7 @@ async function run_wasm_bindgen(dir, wasm_path, out_dir, options) {
         "--out-dir", out_dir,
         "--out-name", "index",
         "--target", "web",
+        "--omit-default-module-path",
         "--no-typescript", // TODO make TypeScript work properly
         wasm_path,
     ];
