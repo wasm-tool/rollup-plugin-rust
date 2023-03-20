@@ -187,15 +187,7 @@ async function build(cx, state, id, options) {
 
 
 function compile_js_inline(options, import_path, real_path, wasm, is_entry) {
-    let export_code;
-
-    if (!is_entry && options.experimental.directExports) {
-        export_code = `export * from ${import_path};`;
-
-    } else {
-        export_code = "";
-    }
-
+    let export_code = `export * from ${import_path};`;
 
     let main_code;
     let sideEffects;
@@ -329,13 +321,8 @@ function compile_js_load(cx, state, options, import_path, real_path, name, wasm,
     }
 
 
-    let export_code = "";
 
-    if (!is_entry && options.experimental.directExports) {
-        export_code = `export * from ${import_path};`;
-    }
-
-
+    let export_code = `export * from ${import_path};`;
     let main_code;
     let sideEffects;
 
