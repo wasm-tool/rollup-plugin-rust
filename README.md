@@ -43,7 +43,7 @@ export default {
 
 You can import as many different `Cargo.toml` files as you want, each one will be compiled separately.
 
-See the [example folder](/example) for a simple working example. First run `yarn install`, and then `yarn watch`.
+See the [example folder](/example) for a simple working example. First run `yarn install`, and then `yarn watch` for development. Use `yarn build` to build for production.
 
 When compiling multiple crates it is recommended to use a single shared [workspace](https://doc.rust-lang.org/cargo/reference/manifest.html#the-workspace-section) to improve compile times.
 

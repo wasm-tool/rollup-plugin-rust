@@ -10,8 +10,8 @@
   "main": "src/index.js",
   "scripts": {
     "test:foo": "cd tests/src/foo && yarn install",
-    "test": "yarn test:foo && cd tests && rimraf dist/js && rollup --config",
-    "test:watch": "yarn test:foo && cd tests && rimraf dist/js && rollup --config --watch",
+    "test": "yarn test:foo && cd tests && rimraf dist/js && rollup --bundleConfigAsCjs --config",
+    "test:watch": "yarn test:foo && cd tests && rimraf dist/js && rollup --bundleConfigAsCjs --config --watch",
     "test:serve": "live-server tests/dist"
   },
   "directories": {
@@ -28,19 +28,19 @@
     "wasm-bindgen"
   ],
   "dependencies": {
-    "binaryen": "^110.0.0",
+    "@rollup/pluginutils": "^5.0.2",
+    "binaryen": "^112.0.0",
     "chalk": "^4.0.0",
-    "glob": "^8.0.1",
+    "glob": "^10.2.2",
     "node-fetch": "^2.0.0",
-    "rimraf": "^3.0.0",
-    "@rollup/pluginutils": "^4.2.1",
+    "rimraf": "^5.0.0",
     "tar": "^6.1.11",
     "toml": "^3.0.0"
   },
   "devDependencies": {
-    "@rollup/plugin-commonjs": "^22.0.0",
-    "@rollup/plugin-node-resolve": "^14.0.1",
+    "@rollup/plugin-commonjs": "^24.1.0",
+    "@rollup/plugin-node-resolve": "^15.0.2",
     "live-server": "^1.2.1",
-    "rollup": "^2.70.2"
+    "rollup": "^3.21.0"
   }
 }

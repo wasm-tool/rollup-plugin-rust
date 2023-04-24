@@ -50,20 +50,11 @@ exports.info = info;
 
 
 function glob(pattern, cwd) {
-    return new Promise(function (resolve, reject) {
-        $glob(pattern, {
-            cwd: cwd,
-            strict: true,
-            absolute: true,
-            nodir: true
-        }, function (err, files) {
-            if (err) {
-                reject(err);
-
-            } else {
-                resolve(files);
-            }
-        });
+    return $glob.glob(pattern, {
+        cwd: cwd,
+        strict: true,
+        absolute: true,
+        nodir: true
     });
 }
 
@@ -71,16 +62,7 @@ exports.glob = glob;
 
 
 function rm(path) {
-    return new Promise(function (resolve, reject) {
-        $rimraf(path, { glob: false }, function (err) {
-            if (err) {
-                reject(err);
-
-            } else {
-                resolve();
-            }
-        });
-    });
+    return $rimraf.rimraf(path, { glob: false });
 }
 
 exports.rm = rm;
