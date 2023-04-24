@@ -23,26 +23,45 @@ async function get_target_dir(state, dir) {
 }
 
 
-function validate_toml(toml) {
-    if (toml.lib && Array.isArray(toml.lib["crate-type"]) && toml.lib["crate-type"].indexOf("cdylib") !== -1) {
-        return;
-    }
-
-    throw new Error("Cargo.toml must use `crate-type = [\"cdylib\"]`");
-}
-
-
 async function run_cargo(dir, options) {
     const cargo_exec = getEnv("CARGO_BIN", "cargo");
 
     let cargo_args = [
-        "build",
+        "rustc",
         "--lib",
         "--target", "wasm32-unknown-unknown",
+        "--crate-type", "cdylib", // Needed for wasm-bindgen to work
     ];
 
-    if (!options.debug) {
+    // https://doc.rust-lang.org/cargo/reference/profiles.html#dev
+    if (options.debug) {
+        // Wasm doesn't support unwind
+        cargo_args.push("--config");
+        cargo_args.push("profile.dev.panic=\"abort\"");
+
+        cargo_args.push("--config");
+        cargo_args.push("profile.dev.lto=\"off\"");
+
+        // Speeds up compilation
+        // https://github.com/MoonZoon/MoonZoon/issues/170
+        cargo_args.push("--config");
+        cargo_args.push("profile.dev.debug=false");
+
+    // https://doc.rust-lang.org/cargo/reference/profiles.html#release
+    } else {
         cargo_args.push("--release");
+
+        // Wasm doesn't support unwind
+        cargo_args.push("--config");
+        cargo_args.push("profile.release.panic=\"abort\"");
+
+        // Improves runtime performance and file size
+        cargo_args.push("--config");
+        cargo_args.push("profile.release.lto=true");
+
+        // Improves runtime performance
+        cargo_args.push("--config");
+        cargo_args.push("profile.release.codegen-units=1");
     }
 
     if (options.cargoArgs) {
@@ -97,8 +116,7 @@ async function load_wasm(out_dir, options) {
 async function compile_rust(cx, dir, id, target_dir, source, options) {
     const toml = $toml.parse(source);
 
-    validate_toml(toml);
-
+    // TODO make this faster somehow
     // TODO does it need to do more transformations on the name ?
     const name = toml.package.name.replace(/\-/g, "_");
 
