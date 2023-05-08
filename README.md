@@ -74,6 +74,27 @@ async function loadWasm() {
 }
 ```
 
+
+### Usage with Vite
+
+This plugin works out of the box with Vite, however Vite has SSR, which means that it runs your code on both the server and browser.
+
+This can cause errors when loading Wasm files, so you need to disable SSR when loading the Wasm:
+
+```js
+import wasm from "./path/to/Cargo.toml";
+
+async function loadWasm() {
+    if (!import.meta.env.SSR) {
+        // This code will only run in the browser
+        const exports = await wasm();
+
+        // Use functions which were exported from Rust...
+    }
+}
+```
+
+
 ### Customizing the import URL
 
 At build time you can use the `serverPath` or `importHook` build options (described below) to customize the import URL for the `.wasm` file.
