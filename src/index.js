@@ -494,6 +494,15 @@ module.exports = function rust(options = {}) {
     return {
         name: "rust",
 
+        // Vite-specific hook
+        configResolved(config) {
+            if (config.command !== "build") {
+                // We have to force inlineWasm during dev because Vite doesn't support emitFile
+                // https://github.com/vitejs/vite/issues/7029
+                options.inlineWasm = true;
+            }
+        },
+
         buildStart(rollup) {
             state.file_ids.clear();
             state.target_dir_cache = {};
