@@ -443,6 +443,8 @@ module.exports = function rust(options = {}) {
     const filter = createFilter(options.include, options.exclude);
 
     const state = {
+        // Whether the plugin is running in Vite or not
+        vite: false,
         file_ids: new Set(),
         target_dir_cache: {},
         cargo_toml_cache: {},
@@ -496,6 +498,8 @@ module.exports = function rust(options = {}) {
 
         // Vite-specific hook
         configResolved(config) {
+            state.vite = true;
+
             if (config.command !== "build") {
                 // We have to force inlineWasm during dev because Vite doesn't support emitFile
                 // https://github.com/vitejs/vite/issues/7029
@@ -582,7 +586,7 @@ module.exports = function rust(options = {}) {
             },
         },
 
-        load(id) {
+        load(id, loadState) {
             const info = this.getModuleInfo(id);
 
             if (info && info.meta) {
@@ -590,12 +594,26 @@ module.exports = function rust(options = {}) {
 
                 if (meta) {
                     if (meta.root) {
-                        // This compiles the Cargo.toml
-                        if (id.endsWith(ENTRY_SUFFIX)) {
-                            return load_cargo_toml(this, state, id.slice(0, -ENTRY_SUFFIX.length), true, meta, options);
+                        // This causes Vite to load a noop module during SSR
+                        if (state.vite && loadState.ssr) {
+                            return {
+                                code: `
+                                    export default async function (opt = {}) {
+                                        return {};
+                                    }
+                                `,
+                                map: { mappings: '' },
+                                moduleSideEffects: false,
+                            };
 
                         } else {
-                            return load_cargo_toml(this, state, id, false, meta, options);
+                            // This compiles the Cargo.toml
+                            if (id.endsWith(ENTRY_SUFFIX)) {
+                                return load_cargo_toml(this, state, id.slice(0, -ENTRY_SUFFIX.length), true, meta, options);
+
+                            } else {
+                                return load_cargo_toml(this, state, id, false, meta, options);
+                            }
                         }
 
                     } else {
