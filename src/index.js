@@ -596,15 +596,24 @@ module.exports = function rust(options = {}) {
                     if (meta.root) {
                         // This causes Vite to load a noop module during SSR
                         if (state.vite && loadState && loadState.ssr) {
-                            return {
-                                code: `
-                                    export default async function (opt = {}) {
-                                        return {};
-                                    }
-                                `,
-                                map: { mappings: '' },
-                                moduleSideEffects: false,
-                            };
+                            if (id.endsWith(ENTRY_SUFFIX)) {
+                                return {
+                                    code: ``,
+                                    map: { mappings: '' },
+                                    moduleSideEffects: false,
+                                };
+
+                            } else {
+                                return {
+                                    code: `
+                                        export default async function (opt = {}) {
+                                            return {};
+                                        }
+                                    `,
+                                    map: { mappings: '' },
+                                    moduleSideEffects: false,
+                                };
+                            }
 
                         } else {
                             // This compiles the Cargo.toml
