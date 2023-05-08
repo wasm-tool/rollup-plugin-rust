@@ -19,13 +19,15 @@
   },
   "keywords": [
     "rollup-plugin",
+    "vite-plugin",
     "rust-wasm",
     "wasm",
     "rust",
     "rollup",
     "plugin",
     "webassembly",
-    "wasm-bindgen"
+    "wasm-bindgen",
+    "wasm-pack"
   ],
   "dependencies": {
     "@rollup/pluginutils": "^5.0.2",
