@@ -595,7 +595,7 @@ module.exports = function rust(options = {}) {
                 if (meta) {
                     if (meta.root) {
                         // This causes Vite to load a noop module during SSR
-                        if (state.vite && loadState.ssr) {
+                        if (state.vite && loadState && loadState.ssr) {
                             return {
                                 code: `
                                     export default async function (opt = {}) {
