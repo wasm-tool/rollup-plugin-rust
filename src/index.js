@@ -523,76 +523,63 @@ module.exports = function rust(options = {}) {
             }
         },
 
-        // TODO Incredible hack to work around this bug in Rollup:
-        //      https://github.com/rollup/plugins/issues/1169
-        options(rawOptions) {
-            // We inject the resolver in the beginning so that "catch-all-resolver" like node-resolve
-            // do not prevent our plugin from resolving entry points.
-            const plugins = Array.isArray(rawOptions.plugins)
-                ? [...rawOptions.plugins]
-                : rawOptions.plugins
-                ? [rawOptions.plugins]
-                : [];
+        // This is only compatible with Rollup 2.78.0 and higher
+        resolveId: {
+            order: "pre",
+            handler(id, importer, info) {
+                if ($path.basename(id) === "Cargo.toml" && filter(id)) {
+                    const path = (importer ? $path.resolve($path.dirname(importer), id) : $path.resolve(id));
 
-            plugins.unshift({
-                name: "rust--resolver",
-                resolveId(id, importer, info) {
-                    if ($path.basename(id) === "Cargo.toml" && filter(id)) {
-                        const path = (importer ? $path.resolve($path.dirname(importer), id) : $path.resolve(id));
-
-                        // This adds a suffix so that the load hook can reliably detect whether it's an entry or not.
-                        // This is needed because isEntry is ONLY reliable inside of resolveId.
-                        if (info.isEntry) {
-                            return {
-                                id: `${path}${ENTRY_SUFFIX}`,
-                                meta: {
-                                    "rollup-plugin-rust": { root: true }
-                                }
-                            };
-
-                        } else {
-                            return {
-                                id: path,
-                                moduleSideEffects: false,
-                                meta: {
-                                    "rollup-plugin-rust": { root: true }
-                                }
-                            };
-                        }
-
-                    // Rewrites the fake file paths to real file paths.
-                    } else if (importer && id[0] === ".") {
-                        const info = this.getModuleInfo(importer);
-
-                        if (info && info.meta) {
-                            const meta = info.meta["rollup-plugin-rust"];
-
-                            if (meta && !meta.root) {
-                                // TODO maybe use resolve ?
-                                const path = $path.join($path.dirname(importer), id);
-
-                                const real_path = (id.startsWith(PREFIX)
-                                    ? meta.real_path
-                                    : $path.join($path.dirname(meta.real_path), id));
-
-                                return {
-                                    id: path,
-                                    meta: {
-                                        "rollup-plugin-rust": {
-                                            root: false,
-                                            real_path,
-                                        }
-                                    }
-                                };
+                    // This adds a suffix so that the load hook can reliably detect whether it's an entry or not.
+                    // This is needed because isEntry is ONLY reliable inside of resolveId.
+                    if (info.isEntry) {
+                        return {
+                            id: `${path}${ENTRY_SUFFIX}`,
+                            meta: {
+                                "rollup-plugin-rust": { root: true }
                             }
-                        }
+                        };
+
+                    } else {
+                        return {
+                            id: path,
+                            moduleSideEffects: false,
+                            meta: {
+                                "rollup-plugin-rust": { root: true }
+                            }
+                        };
                     }
 
-                    return null;
-                },
-            });
+                // Rewrites the fake file paths to real file paths.
+                } else if (importer && id[0] === ".") {
+                    const info = this.getModuleInfo(importer);
 
-            return { ...rawOptions, plugins };
+                    if (info && info.meta) {
+                        const meta = info.meta["rollup-plugin-rust"];
+
+                        if (meta && !meta.root) {
+                            // TODO maybe use resolve ?
+                            const path = $path.join($path.dirname(importer), id);
+
+                            const real_path = (id.startsWith(PREFIX)
+                                ? meta.real_path
+                                : $path.join($path.dirname(meta.real_path), id));
+
+                            return {
+                                id: path,
+                                meta: {
+                                    "rollup-plugin-rust": {
+                                        root: false,
+                                        real_path,
+                                    }
+                                }
+                            };
+                        }
+                    }
+                }
+
+                return null;
+            },
         },
 
         load(id) {
