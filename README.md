@@ -110,7 +110,11 @@ async function loadWasm() {
         serverPath: "/foo/",
 
         // This will prepend `/bar/` to the import URL.
-        importHook: (path) => "/bar/" + path
+        importHook: (path) => "/bar/" + path,
+
+        // This allows for customizing the initialization of the WebAssembly module.
+        // This is primarily useful for doing multi-threading with Workers.
+        initializeHook: (init, path) => init(path),
     });
 
     // Use functions which were exported from Rust...

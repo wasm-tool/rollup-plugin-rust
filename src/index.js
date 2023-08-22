@@ -326,6 +326,8 @@ function compile_js_load(cx, state, options, import_path, real_path, name, wasm,
 
     let wasm_path = `import.meta.ROLLUP_FILE_URL_${fileId}`;
 
+    let initialize = `exports.default(final_path)`;
+
     let prelude = "";
 
     if (options.nodejs) {
@@ -343,7 +345,7 @@ function compile_js_load(cx, state, options, import_path, real_path, name, wasm,
             });
         }`;
 
-        wasm_path = `loadFile(${wasm_path})`;
+        initialize = `exports.default(loadFile(final_path))`;
     }
 
 
@@ -363,28 +365,34 @@ function compile_js_load(cx, state, options, import_path, real_path, name, wasm,
     } else {
         if (options.experimental.directExports) {
             sideEffects = true;
-            main_code = `await exports.default(${wasm_path});`;
+            main_code = `const final_path = wasm_path; await ${initialize};`;
 
         } else if (is_entry) {
             sideEffects = true;
-            main_code = `exports.default(${wasm_path}).catch(console.error);`
+            main_code = `const final_path = wasm_path; ${initialize}.catch(console.error);`
 
         } else {
             sideEffects = false;
             main_code = `export default async (opt = {}) => {
-                let {importHook, serverPath} = opt;
+                let {importHook, serverPath, initializeHook} = opt;
 
-                let path = ${wasm_path};
+                let final_path = wasm_path;
 
                 if (serverPath != null) {
-                    path = serverPath + /[^\\/\\\\]*$/.exec(path)[0];
+                    final_path = serverPath + /[^\\/\\\\]*$/.exec(final_path)[0];
                 }
 
                 if (importHook != null) {
-                    path = importHook(path);
+                    final_path = importHook(final_path);
                 }
 
-                await exports.default(path);
+                if (initializeHook != null) {
+                    await initializeHook(exports.default, final_path);
+
+                } else {
+                    await ${initialize};
+                }
+
                 return exports;
             };`;
         }
@@ -395,8 +403,18 @@ function compile_js_load(cx, state, options, import_path, real_path, name, wasm,
         code: `
             ${export_code}
             import * as exports from ${import_path};
+
+            const wasm_path = ${wasm_path};
+
             ${prelude}
             ${main_code}
+
+            export const __META__ = {
+                wasm_bindgen: {
+                    js_path: ${import_path},
+                    wasm_path: wasm_path,
+                },
+            };
         `,
         map: { mappings: '' },
         moduleSideEffects: sideEffects,
