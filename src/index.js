@@ -242,8 +242,16 @@ function compile_js_inline(options, import_path, real_path, wasm, is_entry) {
 
         } else {
             sideEffects = false;
-            main_code = `export default async () => {
-                await exports.default(wasm_code);
+            main_code = `export default async (opt = {}) => {
+                let {initializeHook} = opt;
+
+                if (initializeHook != null) {
+                    await initializeHook(exports.default, wasm_code);
+
+                } else {
+                    await exports.default(wasm_code);
+                }
+
                 return exports;
             };`;
         }
