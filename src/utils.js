@@ -145,6 +145,22 @@ function readString(path) {
 exports.readString = readString;
 
 
+function writeString(path, value) {
+    return new Promise(function (resolve, reject) {
+        $fs.writeFile(path, value, { encoding: "utf8" }, function (err) {
+            if (err) {
+                reject(err);
+
+            } else {
+                resolve();
+            }
+        });
+    });
+}
+
+exports.writeString = writeString;
+
+
 function getEnv(name, fallback) {
     const value = process.env[name];
 

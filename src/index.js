@@ -1,7 +1,7 @@
 const $path = require("path");
 const $toml = require("toml");
 const { createFilter } = require("@rollup/pluginutils");
-const { glob, rm, mv, read, readString, exec, spawn, lock, debug, getEnv } = require("./utils");
+const { glob, rm, mv, mkdir, read, readString, writeString, exec, spawn, lock, debug, getEnv } = require("./utils");
 const { run_wasm_bindgen } = require("./wasm-bindgen");
 
 
@@ -433,7 +433,7 @@ function compile_js_load(cx, state, options, import_path, real_path, name, wasm,
 }
 
 
-async function compile_js(cx, state, name, wasm, is_entry, out_dir, options) {
+function compile_js(cx, state, name, wasm, is_entry, out_dir, options) {
     const real_path = $path.join(out_dir, "index.js");
 
     // This returns a fake file path, this ensures that the directory is the
@@ -449,6 +449,62 @@ async function compile_js(cx, state, name, wasm, is_entry, out_dir, options) {
     }
 }
 
+function trim(s) {
+    return s.replace(/\n\n\n+/g, "\n\n").replace(/\n\n+\}/g, "\n}").trim();
+}
+
+function parse_dts(declaration, options) {
+    declaration = declaration
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/ *readonly __wbindgen_.*/g, "")
+        .replace(/export type SyncInitInput.*/g, "")
+        .replace(/export function initSync.*/g, "")
+        .replace(/export default function __wbg_init.*/g, "")
+        .replace(/export type InitInput.*/g, "");
+
+    if (options.experimental.directExports) {
+        declaration = declaration.replace(/export interface InitOutput \{[\s\S]*?\}/g, "");
+
+        return trim(declaration);
+
+    } else {
+        declaration = declaration.replace(/export function .*/, "");
+
+        return `${trim(declaration)}
+
+export interface InitOptions {
+    serverPath?: string;
+
+    importHook?: (path: string) => InitInput;
+
+    initializeHook?: (
+        init: (path: InitInput, memory?: WebAssembly.Memory) => void,
+        path: InitInput,
+    ) => Promise<void>;
+}
+
+declare const init: (options?: InitOptions) => Promise<InitOutput>;
+export default init;
+`;
+    }
+}
+
+
+async function compile_dts(cx, state, name, out_dir, options) {
+    const dir = options.experimental.typescriptDeclarationDir;
+
+    if (dir != null) {
+        const real_path = $path.join(out_dir, "index.d.ts");
+
+        const [declaration] = await Promise.all([
+            readString(real_path),
+            mkdir(dir),
+        ]);
+
+        await writeString($path.join(dir, name + ".d.ts"), parse_dts(declaration, options));
+    }
+}
+
 
 async function load_cargo_toml(cx, state, id, is_entry, meta, options) {
     let result = state.cargo_toml_cache[id];
@@ -458,6 +514,8 @@ async function load_cargo_toml(cx, state, id, is_entry, meta, options) {
     }
 
     result = await result;
+
+    await compile_dts(cx, state, result.name, result.out_dir, options);
 
     return compile_js(cx, state, result.name, result.wasm, is_entry, result.out_dir, options);
 }
@@ -641,8 +699,8 @@ module.exports = function rust(options = {}) {
                                 };
                             }
 
+                        // This compiles the Cargo.toml
                         } else {
-                            // This compiles the Cargo.toml
                             if (id.endsWith(ENTRY_SUFFIX)) {
                                 return load_cargo_toml(this, state, id.slice(0, -ENTRY_SUFFIX.length), true, meta, options);
 

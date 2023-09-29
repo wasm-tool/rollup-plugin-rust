@@ -201,6 +201,12 @@ rust({
         //
         // This requires `inlineWasm: true`.
         synchronous: false,
+
+        // Creates a `.d.ts` file for each `Cargo.toml` crate and places them
+        // into this directory.
+        //
+        // This is useful for libraries which want to export TypeScript types.
+        typescriptDeclarationDir: null,
     },
 })
 ```
