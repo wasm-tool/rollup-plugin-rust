@@ -454,38 +454,32 @@ function trim(s) {
 }
 
 function parse_dts(declaration, options) {
-    declaration = declaration
-        .replace(/\/\*[\s\S]*?\*\//g, "")
-        .replace(/ *readonly __wbindgen_.*/g, "")
-        .replace(/export type SyncInitInput.*/g, "")
-        .replace(/export function initSync.*/g, "")
-        .replace(/export default function __wbg_init.*/g, "")
-        .replace(/export type InitInput.*/g, "");
+    declaration = declaration.replace(/export type InitInput = [\s\S]*/g, "");
+    return trim(declaration);
+}
 
-    if (options.experimental.directExports) {
-        declaration = declaration.replace(/export interface InitOutput \{[\s\S]*?\}/g, "");
+async function compile_dts_init(out_path, name, options) {
+    if (!options.experimental.directExports) {
+        const output = `export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
-        return trim(declaration);
-
-    } else {
-        declaration = declaration.replace(/export function .*/, "");
-
-        return `${trim(declaration)}
+export type InitOutput = typeof import("./${name}");
 
 export interface InitOptions {
     serverPath?: string;
 
-    importHook?: (path: string) => InitInput;
+    importHook?: (path: string) => InitInput | Promise<InitInput>;
 
     initializeHook?: (
-        init: (path: InitInput, memory?: WebAssembly.Memory) => void,
-        path: InitInput,
+        init: (path: InitInput | Promise<InitInput>, memory?: WebAssembly.Memory) => void,
+        path: InitInput | Promise<InitInput>,
     ) => Promise<void>;
 }
 
 declare const init: (options?: InitOptions) => Promise<InitOutput>;
 export default init;
 `;
+
+        await writeString(out_path, output);
     }
 }
 
@@ -501,7 +495,10 @@ async function compile_dts(cx, state, name, out_dir, options) {
             mkdir(dir),
         ]);
 
-        await writeString($path.join(dir, name + ".d.ts"), parse_dts(declaration, options));
+        await Promise.all([
+            writeString($path.join(dir, name + ".d.ts"), parse_dts(declaration, options)),
+            compile_dts_init($path.join(dir, name + "_init.d.ts"), name, options),
+        ]);
     }
 }
 
