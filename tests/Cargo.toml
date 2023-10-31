@@ -3,3 +3,7 @@ members = [
     "src/bar",
     "src/foo",
 ]
+resolver = "2"
+
+[workspace.package]
+edition = "2018"
