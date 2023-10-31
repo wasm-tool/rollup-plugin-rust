@@ -30,14 +30,14 @@
     "wasm-pack"
   ],
   "dependencies": {
+    "@iarna/toml": "^2.2.5",
     "@rollup/pluginutils": "^5.0.2",
     "binaryen": "^111.0.0",
     "chalk": "^4.0.0",
     "glob": "^10.2.2",
     "node-fetch": "^2.0.0",
     "rimraf": "^5.0.0",
-    "tar": "^6.1.11",
-    "toml": "^3.0.0"
+    "tar": "^6.1.11"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^24.1.0",

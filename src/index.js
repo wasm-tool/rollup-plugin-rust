@@ -1,5 +1,5 @@
 const $path = require("path");
-const $toml = require("toml");
+const $toml = require("@iarna/toml");
 const { createFilter } = require("@rollup/pluginutils");
 const { glob, rm, mv, mkdir, read, readString, writeString, exec, spawn, lock, debug, getEnv } = require("./utils");
 const { run_wasm_bindgen } = require("./wasm-bindgen");
