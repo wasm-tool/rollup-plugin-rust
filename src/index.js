@@ -655,7 +655,7 @@ module.exports = function rust(options = {}) {
     if (options.inlineWasm == null) {
         options.inlineWasm = false;
     }
-
+    
     if (options.verbose == null) {
         options.verbose = false;
     }
@@ -674,6 +674,10 @@ module.exports = function rust(options = {}) {
 
     if (options.experimental.synchronous == null) {
         options.experimental.synchronous = false;
+    }
+    
+    if(options.experimental.transpileToJS == null) {
+        options.experimental.transpileToJS = false;
     }
 
     return {
