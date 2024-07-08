@@ -594,30 +594,7 @@ async function load_cargo_toml(cx, state, id, is_entry, meta, options) {
 }
 
 /**
- * @typedef {Object} ExperimentalRustOptions
- * @property {boolean} [directExports]
- * @property {boolean} [synchronous]
- * @property {string} [typescriptDeclarationDir]
- * @property {boolean} [transpileToJS]
- */
-
-/**
- * @typedef {Object} RustOptions
- * @property {string} [serverPath]
- * @property {boolean} [nodejs]
- * @property {boolean} [debug]
- * @property {boolean} [verbose]
- * @property {boolean} [inlineWasm]
- * @property {string[]} [cargoArgs]
- * @property {string[]} [wasmBindgenArgs]
- * @property {string[]} [wasmOptArgs]
- * @property {string[]} [watchPatterns]
- * @property {(string)=>string} [importHook]
- * @property {ExperimentalRustOptions} [experimental]
- */
-
-/**
- * @param {RustOptions} options
+ * @param {import("./index").RustOptions} options
  */
 module.exports = function rust(options = {}) {
     

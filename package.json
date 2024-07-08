@@ -8,6 +8,7 @@
   "homepage": "https://github.com/wasm-tool/rollup-plugin-rust#readme",
   "bugs": "https://github.com/wasm-tool/rollup-plugin-rust/issues",
   "main": "src/index.js",
+  "types": "src/index.d.ts",
   "scripts": {
     "test:foo": "cd tests/src/foo && yarn install",
     "test": "yarn test:foo && cd tests && rimraf dist/js && rollup --bundleConfigAsCjs --config",
