@@ -105,7 +105,7 @@ async function run_wasm_bindgen(dir, wasm_path, out_dir, options) {
     ];
     
     if (!options.experimental.transpileToJs) {
-        wasm_bindgen_args.concat(["--target", "web"]);
+        wasm_bindgen_args.push("--target", "web");
     }
 
     if (options.experimental.typescriptDeclarationDir == null) {
