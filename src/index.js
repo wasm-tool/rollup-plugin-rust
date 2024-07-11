@@ -3,7 +3,10 @@ const $toml = require("@iarna/toml");
 const { createFilter } = require("@rollup/pluginutils");
 const { glob, rm, mv, mkdir, read, readString, writeString, exec, spawn, lock, debug, getEnv } = require("./utils");
 const { run_wasm_bindgen } = require("./wasm-bindgen");
-
+const replaceInFiles = require("replace-in-files");
+const wasm2jsPath = require.resolve('binaryen/bin/wasm2js');
+const rollup = require('rollup');
+const { nodeResolve } = require("@rollup/plugin-node-resolve");
 
 const PREFIX = "./.__rollup-plugin-rust__";
 const ENTRY_SUFFIX = "?rollup-plugin-rust-entry";
@@ -112,6 +115,55 @@ async function load_wasm(out_dir, options) {
     return await read(wasm_path);
 }
 
+async function bundleJS(path) {
+    const bundle = await rollup.rollup({
+        input: path,
+        plugins: [ nodeResolve() ],
+    });
+    
+    const { output } = await bundle.generate({
+        format: 'es',
+    });
+    
+    return output[0].code;
+}
+
+async function run_wasm2js(out_dir, name, options) {
+    const wasm2js_args = [
+        $path.join(out_dir, "index_bg.wasm"),
+        "-o", $path.join(out_dir, name+".js"),
+    ];
+
+    if (options.verbose) {
+        debug(`Running ${wasm2js_args.join(" ")}`);
+    }
+
+    let jsContent;
+    try {
+        await spawn(wasm2jsPath, wasm2js_args, { cwd: out_dir, stdio: "inherit" });
+        
+        await replaceInFiles({
+            files: [
+                $path.join(out_dir, "index.js"),
+                $path.join(out_dir, "index_bg.js"),
+            ],
+            from: /index_bg\.wasm/g,
+            to: name + ".js",
+        });
+
+        jsContent = await bundleJS($path.join(out_dir, "index.js"));
+    } catch (e) {
+        if (options.verbose) {
+            throw e;
+        } else {
+            const e = new Error("wasm2js failed");
+            e.stack = null;
+            throw e;
+        }
+    }
+    
+    return {name, compiledOutput: jsContent.toString(), out_dir};
+}
 
 async function compile_rust(cx, dir, id, target_dir, source, options) {
     const toml = $toml.parse(source);
@@ -152,9 +204,13 @@ async function compile_rust(cx, dir, id, target_dir, source, options) {
                 await run_wasm_opt(cx, out_dir, options);
             }
 
-            const wasm = await load_wasm(out_dir, options);
+            const compiledOutput = await load_wasm(out_dir, options);
+            
+            if(options.experimental.transpileToJS) {
+                return run_wasm2js(out_dir, name, options);
+            }
 
-            return { name, wasm, out_dir };
+            return { name, compiledOutput, out_dir };
         });
 
     } catch (e) {
@@ -204,7 +260,7 @@ async function build(cx, state, id, options) {
 }
 
 
-function compile_js_inline(options, import_path, real_path, wasm, is_entry) {
+function compile_js_inline(options, import_path, real_path, compiledOutput, is_entry) {
     let export_code;
 
     if (!is_entry && options.experimental.directExports) {
@@ -214,6 +270,23 @@ function compile_js_inline(options, import_path, real_path, wasm, is_entry) {
         export_code = "";
     }
 
+    if(options.experimental.transpileToJS) {
+        if (!options.experimental.directExports) {
+            throw new Error("transpileToJS can only be used with experimental.directExports: true");
+        }
+        if(!options.experimental.synchronous) {
+            throw new Error("transpileToJS can only be used with experimental.synchronous: true");
+        }
+
+        return {
+            code: compiledOutput,
+            map: { mappings: '' },
+            moduleSideEffects: true,
+            meta: {
+                "rollup-plugin-rust": { root: false, real_path }
+            },
+        };
+    }
 
     let main_code;
     let sideEffects;
@@ -258,7 +331,7 @@ function compile_js_inline(options, import_path, real_path, wasm, is_entry) {
     }
 
 
-    const wasm_string = JSON.stringify(wasm.toString("base64"));
+    const wasm_string = JSON.stringify(compiledOutput.toString("base64"));
 
     const code = `
         ${export_code}
@@ -309,6 +382,9 @@ function compile_js_inline(options, import_path, real_path, wasm, is_entry) {
 
 function compile_js_load(cx, state, options, import_path, real_path, name, wasm, is_entry) {
     let fileId;
+    if(options.experimental.transpileToJS) {
+        throw new Error("transpileToJS can only be used with inlineWasm: true");
+    }
 
     if (options.outDir == null) {
         fileId = cx.emitFile({
@@ -433,7 +509,7 @@ function compile_js_load(cx, state, options, import_path, real_path, name, wasm,
 }
 
 
-function compile_js(cx, state, name, wasm, is_entry, out_dir, options) {
+function compile_js(cx, state, name, compiledOutput, is_entry, out_dir, options) {
     const real_path = $path.join(out_dir, "index.js");
 
     // This returns a fake file path, this ensures that the directory is the
@@ -441,11 +517,11 @@ function compile_js(cx, state, name, wasm, is_entry, out_dir, options) {
     // package imports work correctly.
     const import_path = `"${PREFIX}${name}/index.js"`;
 
-    if (options.inlineWasm) {
-        return compile_js_inline(options, import_path, real_path, wasm, is_entry);
+    if (options.inlineWasm || options.transpileToJS) {
+        return compile_js_inline(options, import_path, real_path, compiledOutput, is_entry);
 
     } else {
-        return compile_js_load(cx, state, options, import_path, real_path, name, wasm, is_entry);
+        return compile_js_load(cx, state, options, import_path, real_path, name, compiledOutput, is_entry);
     }
 }
 
@@ -514,11 +590,14 @@ async function load_cargo_toml(cx, state, id, is_entry, meta, options) {
 
     await compile_dts(cx, state, result.name, result.out_dir, options);
 
-    return compile_js(cx, state, result.name, result.wasm, is_entry, result.out_dir, options);
+    return compile_js(cx, state, result.name, result.compiledOutput, is_entry, result.out_dir, options);
 }
 
-
+/**
+ * @param {import("./index").RustOptions} options
+ */
 module.exports = function rust(options = {}) {
+    
     // TODO should the filter affect the watching ?
     // TODO should the filter affect the Rust compilation ?
     const filter = createFilter(options.include, options.exclude);
@@ -553,7 +632,7 @@ module.exports = function rust(options = {}) {
     if (options.inlineWasm == null) {
         options.inlineWasm = false;
     }
-
+    
     if (options.verbose == null) {
         options.verbose = false;
     }
@@ -572,6 +651,10 @@ module.exports = function rust(options = {}) {
 
     if (options.experimental.synchronous == null) {
         options.experimental.synchronous = false;
+    }
+    
+    if(options.experimental.transpileToJS == null) {
+        options.experimental.transpileToJS = false;
     }
 
     return {

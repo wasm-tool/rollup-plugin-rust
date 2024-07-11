@@ -101,9 +101,12 @@ async function run_wasm_bindgen(dir, wasm_path, out_dir, options) {
     let wasm_bindgen_args = [
         "--out-dir", out_dir,
         "--out-name", "index",
-        "--target", "web",
         "--omit-default-module-path",
     ];
+    
+    if (!options.experimental.transpileToJs) {
+        wasm_bindgen_args.push("--target", "web");
+    }
 
     if (options.experimental.typescriptDeclarationDir == null) {
         wasm_bindgen_args.push("--no-typescript");

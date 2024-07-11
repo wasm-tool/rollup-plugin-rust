@@ -207,6 +207,12 @@ rust({
         //
         // This is useful for libraries which want to export TypeScript types.
         typescriptDeclarationDir: null,
+        
+        // Whether to transpile the wasm output to JS using wasm2js tool.
+        // Note that this option may slow down your application.
+        //
+        // This requires `inlineWasm: true`, `directExports: true` and `synchronous: true`.
+        transpileToJS: false,
     },
 })
 ```
@@ -224,6 +230,12 @@ rust({
 ```
 
 This is necessary because extension files are put into a separate URL namespace, so you must use `chrome.runtime.getURL` to get the correct URL.
+
+If you want to use inline wasm with extensions, the browser will treat it as remote wasm execution and may block it.
+To avoid this, you can use the `transpileToJS` option, which will transpile wasm to JS.
+Keep in mind that this option may slow down your extension.
+
+```js
 
 ### Environment variables
 
