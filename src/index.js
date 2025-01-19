@@ -1,12 +1,26 @@
-const $path = require("path");
-const $toml = require("@iarna/toml");
-const { createFilter } = require("@rollup/pluginutils");
-const { glob, rm, mv, mkdir, read, readString, writeString, exec, spawn, lock, debug, getEnv } = require("./utils");
-const { run_wasm_bindgen } = require("./wasm-bindgen");
+import * as $path from "node:path";
+import * as $toml from "@iarna/toml";
+import { createFilter } from "@rollup/pluginutils";
+import { glob, rm, mv, mkdir, read, readString, writeString, exec, spawn, lock, debug, getEnv } from "./utils.js";
+import { run_wasm_bindgen } from "./wasm-bindgen.js";
 
 
 const PREFIX = "./.__rollup-plugin-rust__";
 const ENTRY_SUFFIX = "?rollup-plugin-rust-entry";
+
+
+async function get_nightly(state, dir) {
+    let nightly = state.nightly_dir_cache[dir];
+
+    if (nightly == null) {
+        const cargo_exec = getEnv("CARGO_BIN", "cargo");
+        // TODO make this faster somehow ?
+        const version = await exec(`${cargo_exec} --version`, { cwd: dir });
+        nightly = state.nightly_dir_cache[dir] = /\-nightly /.test(version);
+    }
+
+    return nightly;
+}
 
 
 async function get_target_dir(state, dir) {
@@ -23,7 +37,7 @@ async function get_target_dir(state, dir) {
 }
 
 
-async function run_cargo(dir, options) {
+async function run_cargo(dir, options, nightly) {
     const cargo_exec = getEnv("CARGO_BIN", "cargo");
 
     let cargo_args = [
@@ -62,11 +76,34 @@ async function run_cargo(dir, options) {
         // Improves runtime performance
         cargo_args.push("--config");
         cargo_args.push("profile.release.codegen-units=1");
+
+        // Reduces file size
+        cargo_args.push("--config");
+        cargo_args.push("profile.release.strip=true");
+
+        // Reduces file size by removing panic strings
+        if (nightly) {
+            cargo_args.push("-Z", "build-std=panic_abort,std");
+            cargo_args.push("-Z", "build-std-features=panic_immediate_abort,optimize_for_size");
+
+            //cargo_args.push("--config");
+            //cargo_args.push(`build.rustflags=["-Z", "location-detail=none", "-Z", "fmt-debug=none"]`);
+        }
     }
 
     if (options.cargoArgs) {
         cargo_args = cargo_args.concat(options.cargoArgs);
     }
+
+    /*cargo_args.push("--");
+
+    if (options.multithreading) {
+        cargo_args.push("-C", "target-feature=+atomics,+bulk-memory,+mutable-globals");
+    }
+
+    if (options.rustArgs) {
+        cargo_args = cargo_args.concat(options.rustArgs);
+    }*/
 
     if (options.verbose) {
         debug(`Running cargo ${cargo_args.join(" ")}`);
@@ -113,7 +150,7 @@ async function load_wasm(out_dir, options) {
 }
 
 
-async function compile_rust(cx, dir, id, target_dir, source, options) {
+async function compile_rust(cx, dir, id, target_dir, source, options, nightly) {
     const toml = $toml.parse(source);
 
     // TODO make this faster somehow
@@ -128,7 +165,7 @@ async function compile_rust(cx, dir, id, target_dir, source, options) {
                 debug(`Using target directory ${target_dir}`);
             }
 
-            await run_cargo(dir, options);
+            await run_cargo(dir, options, nightly);
 
             const wasm_path = $path.resolve($path.join(
                 target_dir,
@@ -189,14 +226,16 @@ async function watch_files(cx, dir, options) {
 async function build(cx, state, id, options) {
     const dir = $path.dirname(id);
 
-    const [target_dir, source] = await Promise.all([
+    const [nightly, target_dir, source] = await Promise.all([
+        // TODO does this need to be behind the lock too ?
+        get_nightly(state, dir),
         // TODO does this need to be behind the lock too ?
         get_target_dir(state, dir),
         readString(id),
     ]);
 
     const [output] = await Promise.all([
-        compile_rust(cx, dir, id, target_dir, source, options),
+        compile_rust(cx, dir, id, target_dir, source, options, nightly),
         watch_files(cx, dir, options),
     ]);
 
@@ -518,7 +557,7 @@ async function load_cargo_toml(cx, state, id, is_entry, meta, options) {
 }
 
 
-module.exports = function rust(options = {}) {
+export default function rust(options = {}) {
     // TODO should the filter affect the watching ?
     // TODO should the filter affect the Rust compilation ?
     const filter = createFilter(options.include, options.exclude);
@@ -527,6 +566,7 @@ module.exports = function rust(options = {}) {
         // Whether the plugin is running in Vite or not
         vite: false,
         file_ids: new Set(),
+        nightly_dir_cache: {},
         target_dir_cache: {},
         cargo_toml_cache: {},
     };
@@ -590,6 +630,7 @@ module.exports = function rust(options = {}) {
 
         buildStart(rollup) {
             state.file_ids.clear();
+            state.nightly_dir_cache = {};
             state.target_dir_cache = {};
             state.cargo_toml_cache = {};
 

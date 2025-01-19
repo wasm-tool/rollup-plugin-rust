@@ -1,7 +1,7 @@
-const $path = require("path");
-const $tar = require("tar");
-const $fetch = require("node-fetch");
-const { exec, mkdir, get_cache_dir, tar, exists, spawn, info, debug, getEnv } = require("./utils");
+import * as $path from "node:path";
+import * as $tar from "tar";
+import * as $fetch from "node-fetch";
+import { exec, mkdir, get_cache_dir, tar, exists, spawn, info, debug, getEnv } from "./utils.js";
 
 
 function wasm_bindgen_name(version) {
@@ -90,7 +90,7 @@ async function get_wasm_bindgen(dir, options) {
 }
 
 
-async function run_wasm_bindgen(dir, wasm_path, out_dir, options) {
+export async function run_wasm_bindgen(dir, wasm_path, out_dir, options) {
     let wasm_bindgen_command = getEnv("WASM_BINDGEN_BIN", null);
 
     if (wasm_bindgen_command == null) {
@@ -121,5 +121,3 @@ async function run_wasm_bindgen(dir, wasm_path, out_dir, options) {
 
     await spawn(wasm_bindgen_command, wasm_bindgen_args, { cwd: dir, stdio: "inherit" });
 }
-
-exports.run_wasm_bindgen = run_wasm_bindgen;

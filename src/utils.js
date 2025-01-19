@@ -1,15 +1,16 @@
-const $path = require("path");
-const $glob = require("glob");
-const $chalk = require("chalk");
-const $rimraf = require("rimraf");
-const $stream = require("stream");
-const $fs = require("fs");
-const $os = require("os");
-const $child = require("child_process");
-const $tar = require("tar");
+import * as $path from "node:path";
+import * as $stream from "node:stream";
+import * as $fs from "node:fs";
+import * as $os from "node:os";
+import * as $child from "node:child_process";
+
+import * as $glob from "glob";
+import * as $chalk from "chalk";
+import * as $rimraf from "rimraf";
+import * as $tar from "tar";
 
 
-function get_cache_dir(name) {
+export function get_cache_dir(name) {
     switch (process.platform) {
     case "win32":
         const local_app_data = process.env.LOCALAPPDATA || $path.join($os.homedir(), "AppData", "Local");
@@ -25,31 +26,23 @@ function get_cache_dir(name) {
     }
 }
 
-exports.get_cache_dir = get_cache_dir;
 
-
-function posix_path(path) {
+export function posix_path(path) {
     return path.replace(/\\/g, $path.posix.sep);
 }
 
-exports.posix_path = posix_path;
 
-
-function debug(s) {
+export function debug(s) {
     console.debug($chalk.blue("> " + s + "\n"));
 }
 
-exports.debug = debug;
 
-
-function info(s) {
+export function info(s) {
     console.info($chalk.yellow(s));
 }
 
-exports.info = info;
 
-
-function glob(pattern, cwd) {
+export function glob(pattern, cwd) {
     return $glob.glob(pattern, {
         cwd: cwd,
         strict: true,
@@ -58,17 +51,13 @@ function glob(pattern, cwd) {
     });
 }
 
-exports.glob = glob;
 
-
-function rm(path) {
+export function rm(path) {
     return $rimraf.rimraf(path, { glob: false });
 }
 
-exports.rm = rm;
 
-
-function mv(from, to) {
+export function mv(from, to) {
     return new Promise((resolve, reject) => {
         $fs.rename(from, to, (err) => {
             if (err) {
@@ -80,10 +69,8 @@ function mv(from, to) {
     });
 }
 
-exports.mv = mv;
 
-
-function mkdir(path) {
+export function mkdir(path) {
     return new Promise((resolve, reject) => {
         $fs.mkdir(path, { recursive: true }, (err) => {
             if (err) {
@@ -95,10 +82,8 @@ function mkdir(path) {
     });
 }
 
-exports.mkdir = mkdir;
 
-
-function exists(path) {
+export function exists(path) {
     return new Promise((resolve, reject) => {
         $fs.access(path, (err) => {
             if (err) {
@@ -110,10 +95,8 @@ function exists(path) {
     });
 }
 
-exports.exists = exists;
 
-
-function read(path) {
+export function read(path) {
     return new Promise(function (resolve, reject) {
         $fs.readFile(path, function (err, file) {
             if (err) {
@@ -126,10 +109,8 @@ function read(path) {
     });
 }
 
-exports.read = read;
 
-
-function readString(path) {
+export function readString(path) {
     return new Promise(function (resolve, reject) {
         $fs.readFile(path, { encoding: "utf8" }, function (err, file) {
             if (err) {
@@ -142,10 +123,8 @@ function readString(path) {
     });
 }
 
-exports.readString = readString;
 
-
-function writeString(path, value) {
+export function writeString(path, value) {
     return new Promise(function (resolve, reject) {
         $fs.writeFile(path, value, { encoding: "utf8" }, function (err) {
             if (err) {
@@ -158,10 +137,8 @@ function writeString(path, value) {
     });
 }
 
-exports.writeString = writeString;
 
-
-function getEnv(name, fallback) {
+export function getEnv(name, fallback) {
     const value = process.env[name];
 
     if (value == null) {
@@ -172,10 +149,8 @@ function getEnv(name, fallback) {
     }
 }
 
-exports.getEnv = getEnv;
 
-
-function exec(cmd, options) {
+export function exec(cmd, options) {
     return new Promise((resolve, reject) => {
         $child.exec(cmd, options, (err, stdout, stderr) => {
             if (err) {
@@ -191,17 +166,13 @@ function exec(cmd, options) {
     });
 }
 
-exports.exec = exec;
 
-
-function spawn(command, args, options) {
+export function spawn(command, args, options) {
     return wait($child.spawn(command, args, options));
 }
 
-exports.spawn = spawn;
 
-
-function wait(p) {
+export function wait(p) {
     return new Promise((resolve, reject) => {
         p.on("close", (code) => {
             if (code === 0) {
@@ -216,10 +187,8 @@ function wait(p) {
     });
 }
 
-exports.wait = wait;
 
-
-function tar(stream, options) {
+export function tar(stream, options) {
     return new Promise((resolve, reject) => {
         $stream.pipeline(
             stream,
@@ -238,15 +207,13 @@ function tar(stream, options) {
     });
 }
 
-exports.tar = tar;
-
 
 const lockState = {
     locked: false,
     pending: [],
 };
 
-async function lock(f) {
+export async function lock(f) {
     if (lockState.locked) {
         await new Promise(function (resolve, reject) {
             lockState.pending.push(resolve);
@@ -272,5 +239,3 @@ async function lock(f) {
         }
     }
 }
-
-exports.lock = lock;
