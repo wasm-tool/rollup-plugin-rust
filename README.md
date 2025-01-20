@@ -59,6 +59,9 @@ import { foo, bar } from "./path/to/Cargo.toml";
 // Use functions which were exported from Rust...
 ```
 
+----
+
+## Tips
 
 ### Workspaces
 
@@ -160,6 +163,7 @@ async function loadWasm() {
 }
 ```
 
+----
 
 ## Build options
 
