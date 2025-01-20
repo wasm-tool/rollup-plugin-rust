@@ -33,7 +33,6 @@
   "dependencies": {
     "@iarna/toml": "^2.2.5",
     "@rollup/pluginutils": "^5.1.4",
-    "binaryen": "^121.0.0",
     "chalk": "^5.4.1",
     "glob": "^11.0.1",
     "node-fetch": "^3.3.2",
@@ -45,5 +44,8 @@
     "@rollup/plugin-node-resolve": "^16.0.0",
     "live-server": "^1.2.2",
     "rollup": "^4.30.1"
+  },
+  "peerDependencies": {
+    "binaryen": "^121.0.0"
   }
 }

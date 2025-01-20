@@ -11,13 +11,11 @@ export default {
     },
     output: {
         dir: "dist/js",
-        format: "iife",
+        format: "es",
         sourcemap: true,
     },
     plugins: [
-        rust({
-            serverPath: "/js/",
-        }),
+        rust(),
 
         is_watch && serve({
             contentBase: "dist",

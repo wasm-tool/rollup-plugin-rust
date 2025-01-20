@@ -6,6 +6,7 @@ This plugin internally uses [`wasm-bindgen`](https://rustwasm.github.io/docs/was
 
 `wasm-bindgen` is automatically installed, you do not need to install it separately.
 
+
 ## Installation
 
 First, make sure that [rustup](https://rustup.rs/) is installed.
@@ -15,14 +16,15 @@ If you are on Windows, then you also need to install the [Visual Studio build to
 Lastly, run this:
 
 ```sh
-yarn add --dev @wasm-tool/rollup-plugin-rust
+yarn add --dev @wasm-tool/rollup-plugin-rust binaryen
 ```
 
 Or if you're using npm you can use this instead:
 
 ```sh
-npm install --save-dev @wasm-tool/rollup-plugin-rust
+npm install --save-dev @wasm-tool/rollup-plugin-rust binaryen
 ```
+
 
 ## Usage
 
@@ -32,6 +34,7 @@ Add the plugin to your `rollup.config.js`, and now you can use `Cargo.toml` file
 import rust from "@wasm-tool/rollup-plugin-rust";
 
 export default {
+    format: "es",
     input: {
         foo: "Cargo.toml",
     },
@@ -45,34 +48,65 @@ You can import as many different `Cargo.toml` files as you want, each one will b
 
 See the [example folder](/example) for a simple working example. First run `yarn install`, and then `yarn watch` for development. Use `yarn build` to build for production.
 
-When compiling multiple crates it is recommended to use a single shared [workspace](https://doc.rust-lang.org/cargo/reference/manifest.html#the-workspace-section) to improve compile times.
 
 ### Importing `Cargo.toml` within `.js`
 
 It is also possible to import a `Cargo.toml` file inside of a `.js` file, like this:
 
 ```js
-import wasm from "./path/to/Cargo.toml";
+import { foo, bar } from "./path/to/Cargo.toml";
 
-async function loadWasm() {
-    const exports = await wasm();
-
-    // Use functions which were exported from Rust...
-}
+// Use functions which were exported from Rust...
 ```
 
-This will load the Rust `.js` glue code synchronously, but the Rust `.wasm` code will be loaded asynchronously (which is why the `wasm` function returns a `Promise`).
 
-If you instead want to load *everything* asynchronously, you can use dynamic `import`, like this:
+### Workspaces
 
-```js
-async function loadWasm() {
-    const wasm = await import("./path/to/Cargo.toml");
-    const exports = await wasm.default();
+When compiling multiple crates it is highly recommended to use a [workspace](https://doc.rust-lang.org/cargo/reference/manifest.html#the-workspace-section) to improve compile times.
 
-    // Use functions which were exported from Rust...
-}
+Create a `Cargo.toml` file in the root of your project which lists out the sub-crates that are a part of the workspace:
+
+```toml
+[workspace]
+members = [
+    "src/foo",
+    "src/bar",
+]
 ```
+
+
+### Nightly
+
+It is recommended to use the [nightly toolchain](https://rust-lang.github.io/rustup/overrides.html#the-toolchain-file) because it significantly reduces the size of the `.wasm` file.
+
+You can use nightly by creating a `rust-toolchain.toml` file in your project directory:
+
+```toml
+[toolchain]
+channel = "nightly-2025-01-16"
+components = [ "rust-std", "rust-src" ]
+targets = [ "wasm32-unknown-unknown" ]
+```
+
+You can change the `channel` to upgrade to the latest nightly version (or downgrade to a past nightly version).
+
+
+### Optimizing for size
+
+By default the Rust compiler optimizes for maximum runtime performance, but this comes at the cost of a bigger file size.
+
+On the web it is desirable to have a small file size, because a smaller `.wasm` file will download faster.
+
+This plugin automatically optimizes for smaller file size, but you can reduce the size even further by adding this into your `Cargo.toml`:
+
+```toml
+[profile.release]
+opt-level = "z"
+```
+
+You can also try `opt-level = "s"` which in some cases might produce a smaller file size.
+
+If you're using workspaces, make sure to add that into your *workspace* `Cargo.toml`, not the sub-crates.
 
 
 ### Usage with Vite
@@ -82,12 +116,10 @@ This plugin works out of the box with Vite, however Vite has SSR, which means th
 This can cause errors when loading Wasm files, so you need to disable SSR when loading the Wasm:
 
 ```js
-import wasm from "./path/to/Cargo.toml";
-
 async function loadWasm() {
+    // This code will only run in the browser
     if (!import.meta.env.SSR) {
-        // This code will only run in the browser
-        const exports = await wasm();
+        const { foo, bar } = await import("./path/to/Cargo.toml");
 
         // Use functions which were exported from Rust...
     }
@@ -95,33 +127,39 @@ async function loadWasm() {
 ```
 
 
-### Customizing the import URL
+### Customizing the Wasm loading
 
-At build time you can use the `serverPath` or `importHook` build options (described below) to customize the import URL for the `.wasm` file.
+For very advanced use cases, you might want to manually initialize the `.wasm` code.
 
-However, sometimes you need to customize the URL at runtime. In that case you can pass the `serverPath` or `importHook` options to the function (they behave the same as the build options):
+If you add `?custom` when importing a `Cargo.toml` file, it will give you:
+
+* `module` which is the `URL` of the `.wasm` file, or a `Uint8Array` if using `inlineWasm: true`.
+
+* `init` which is a function that initializes the Wasm and returns a Promise. The `init` function accepts these options:
+
+   * `module` which is a `URL` or `Uint8Array` or `WebAssembly.Module` for the `.wasm` code.
+   * `memory` which is a `WebAssembly.Memory` that will be used as the memory for the Wasm.
 
 ```js
-import wasm from "./path/to/Cargo.toml";
+import { module, init } from "./path/to/Cargo.toml?custom";
 
 async function loadWasm() {
-    const exports = await wasm({
-        // This will replace the directory with `/foo/`
-        serverPath: "/foo/",
+    const { foo, bar } = await init({
+        // The URL or Uint8Array which will be initialized.
+        module: module,
 
-        // This will prepend `/bar/` to the import URL.
-        importHook: (path) => "/bar/" + path,
-
-        // This allows for customizing the initialization of the WebAssembly module.
-        // This is primarily useful for doing multi-threading with Workers.
-        initializeHook: (init, path) => init(path),
+        // The WebAssembly.Memory which will be used for the Wasm.
+        //
+        // If this is undefined then it will automatically create a new memory.
+        //
+        // This is useful for doing multi-threading with multiple Workers sharing the same SharedArrayBuffer.
+        memory: undefined,
     });
 
     // Use functions which were exported from Rust...
 }
 ```
 
-Usually you only need to pass one or the other, not both. Use `serverPath` for replacing the entire directory, and use `importHook` for prepending or doing more advanced things.
 
 ## Build options
 
@@ -131,70 +169,51 @@ These are the default options:
 
 ```js
 rust({
-    // Directory on your server where the .wasm files will be loaded from.
-    // This is prepended to the URL, so you should put a / at the end of the directory,
-    // for example "/foo/".
-    serverPath: "",
-
     // Whether the code will be run in Node.js or not.
     //
     // This is needed because Node.js does not support `fetch`.
     nodejs: false,
 
-    // Whether to build in debug mode or release mode.
-    // In watch mode this defaults to true.
-    debug: false,
-
-    // Whether to display extra compilation information in the console.
-    verbose: false,
-
     // Whether to inline the `.wasm` file into the `.js` file.
     //
     // This is slower and it increases the file size by ~33%,
     // but it does not require a separate `.wasm` file.
-    //
-    // If this is `true` then `serverPath`, `nodejs`,
-    // and `importHook` will be ignored.
     inlineWasm: false,
 
-    // Extra arguments passed to `cargo build`.
-    cargoArgs: [],
+    // Whether to display extra compilation information in the console.
+    verbose: false,
 
-    // Extra arguments passed to `wasm-bindgen`.
-    wasmBindgenArgs: [],
+    extraArgs: {
+        // Extra arguments passed to `cargo rustc`.
+        cargo: [],
 
-    // Arguments passed to `wasm-opt`.
-    wasmOptArgs: ["-O"],
+        // Extra arguments passed to `wasm-bindgen`.
+        wasmBindgen: [],
+
+        // Extra arguments passed to `wasm-opt`.
+        wasmOpt: ["-O"],
+    },
+
+    optimize: {
+        // Whether to build in release mode.
+        //
+        // In watch mode this defaults to false.
+        release: true,
+
+        // Whether to use optimized rustc settings.
+        //
+        // This slows down compilation but significantly reduces the file size.
+        //
+        // If you use the nightly toolchain, this will reduce the file size even more.
+        rustc: true,
+    },
 
     // Which files it should watch in watch mode. This is relative to the Cargo.toml file.
     // Supports all of the glob syntax: https://www.npmjs.com/package/glob
     watchPatterns: ["src/**"],
 
-    // Allows you to customize the behavior for loading the .wasm file,
-    // this is for advanced users only!
-    importHook: function (path) { return JSON.stringify(path); },
-
     // These options should not be relied upon, they can change or disappear in future versions.
     experimental: {
-        // Changes the way that the modules are generated. Normally you import Rust like this:
-        //
-        //     import wasm from "./path/to/Cargo.toml";
-        //
-        //     async function loadWasm() {
-        //         const exports = await wasm();
-        //
-        //         // Use functions which were exported from Rust...
-        //     }
-        //
-        // But now you import Rust like this:
-        //
-        //     import { foo, bar } from "./path/to/Cargo.toml";
-        //
-        //     // Use functions which were exported from Rust...
-        //
-        // You might need to set the Rollup `format` to "es" or "system".
-        directExports: false,
-
         // Whether the Wasm will be initialized synchronously or not.
         //
         // In the browser you can only use synchronous loading inside of Workers.
@@ -211,19 +230,6 @@ rust({
 })
 ```
 
-### Chrome / Firefox extensions
-
-If you are creating a Chrome / Firefox extension you may need to use `importHook` to customize the loading behavior, like this:
-
-```js
-rust({
-    importHook: function (path) {
-        return "chrome.runtime.getURL(" + JSON.stringify(path) + ")";
-    },
-})
-```
-
-This is necessary because extension files are put into a separate URL namespace, so you must use `chrome.runtime.getURL` to get the correct URL.
 
 ### Environment variables
 

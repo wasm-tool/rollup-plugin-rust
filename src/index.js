@@ -1,559 +1,573 @@
 import * as $path from "node:path";
 import * as $toml from "@iarna/toml";
 import { createFilter } from "@rollup/pluginutils";
-import { glob, rm, mv, mkdir, read, readString, writeString, exec, spawn, lock, debug, getEnv } from "./utils.js";
-import { run_wasm_bindgen } from "./wasm-bindgen.js";
+import { glob, rm, read, readString, debug, getEnv } from "./utils.js";
+import * as $wasmBindgen from "./wasm-bindgen.js";
+import * as $cargo from "./cargo.js";
+import * as $wasmOpt from "./wasm-opt.js";
+import * as $typescript from "./typescript.js";
 
 
 const PREFIX = "./.__rollup-plugin-rust__";
-const ENTRY_SUFFIX = "?rollup-plugin-rust-entry";
+const INLINE_ID = "\0__rollup-plugin-rust-inlineWasm__";
 
 
-async function get_nightly(state, dir) {
-    let nightly = state.nightly_dir_cache[dir];
-
-    if (nightly == null) {
-        const cargo_exec = getEnv("CARGO_BIN", "cargo");
-        // TODO make this faster somehow ?
-        const version = await exec(`${cargo_exec} --version`, { cwd: dir });
-        nightly = state.nightly_dir_cache[dir] = /\-nightly /.test(version);
-    }
-
-    return nightly;
+function stripPath(path) {
+    return path.replace(/\?[^\?]*$/, "");
 }
 
 
-async function get_target_dir(state, dir) {
-    let target_dir = state.target_dir_cache[dir];
+class State {
+    constructor(options) {
+        // Whether the plugin is running in Vite or not
+        this.vite = false;
 
-    if (target_dir == null) {
-        const cargo_exec = getEnv("CARGO_BIN", "cargo");
-        // TODO make this faster somehow ?
-        const metadata = await exec(`${cargo_exec} metadata --format-version 1 --no-deps --color never`, { cwd: dir });
-        target_dir = state.target_dir_cache[dir] = JSON.parse(metadata).target_directory;
+        // Whether we're in watch mode or not
+        this.watch = false;
+
+        // Whether to optimize in release mode
+        this.release = true;
+
+        this.fileIds = new Set();
+
+        this.options = options;
+
+        this.cache = {
+            nightly: {},
+            targetDir: {},
+            wasmBindgen: {},
+            build: {},
+        };
     }
 
-    return target_dir;
-}
+    reset() {
+        this.fileIds.clear();
 
+        this.cache.nightly = {};
+        this.cache.targetDir = {};
+        this.cache.wasmBindgen = {};
+        this.cache.build = {};
+    }
 
-async function run_cargo(dir, options, nightly) {
-    const cargo_exec = getEnv("CARGO_BIN", "cargo");
+    setDefaults() {
+        if (this.options.watchPatterns == null) {
+            this.options.watchPatterns = [
+                "src/**"
+            ];
+        }
 
-    let cargo_args = [
-        "rustc",
-        "--lib",
-        "--target", "wasm32-unknown-unknown",
-        "--crate-type", "cdylib", // Needed for wasm-bindgen to work
-    ];
+        if (this.options.inlineWasm == null) {
+            this.options.inlineWasm = false;
+        }
 
-    // https://doc.rust-lang.org/cargo/reference/profiles.html#dev
-    if (options.debug) {
-        // Wasm doesn't support unwind
-        cargo_args.push("--config");
-        cargo_args.push("profile.dev.panic=\"abort\"");
+        if (this.options.verbose == null) {
+            this.options.verbose = false;
+        }
 
-        cargo_args.push("--config");
-        cargo_args.push("profile.dev.lto=\"off\"");
+        if (this.options.nodejs == null) {
+            this.options.nodejs = false;
+        }
 
-        // Speeds up compilation
-        // https://github.com/MoonZoon/MoonZoon/issues/170
-        cargo_args.push("--config");
-        cargo_args.push("profile.dev.debug=false");
+        if (this.options.optimize == null) {
+            this.options.optimize = {};
+        }
 
-    // https://doc.rust-lang.org/cargo/reference/profiles.html#release
-    } else {
-        cargo_args.push("--release");
+        if (this.options.optimize.rustc == null) {
+            this.options.optimize.rustc = true;
+        }
 
-        // Wasm doesn't support unwind
-        cargo_args.push("--config");
-        cargo_args.push("profile.release.panic=\"abort\"");
+        if (this.options.extraArgs == null) {
+            this.options.extraArgs = {};
+        }
 
-        // Improves runtime performance and file size
-        cargo_args.push("--config");
-        cargo_args.push("profile.release.lto=true");
+        if (this.options.extraArgs.cargo == null) {
+            this.options.extraArgs.cargo = [];
+        }
 
-        // Improves runtime performance
-        cargo_args.push("--config");
-        cargo_args.push("profile.release.codegen-units=1");
+        if (this.options.extraArgs.wasmBindgen == null) {
+            this.options.extraArgs.wasmBindgen = [];
+        }
 
-        // Reduces file size
-        cargo_args.push("--config");
-        cargo_args.push("profile.release.strip=true");
+        if (this.options.extraArgs.wasmOpt == null) {
+            // TODO figure out better optimization options ?
+            this.options.extraArgs.wasmOpt = ["-O"];
+        }
 
-        // Reduces file size by removing panic strings
-        if (nightly) {
-            cargo_args.push("-Z", "build-std=panic_abort,std");
-            cargo_args.push("-Z", "build-std-features=panic_immediate_abort,optimize_for_size");
+        if (this.options.experimental == null) {
+            this.options.experimental = {};
+        }
 
-            //cargo_args.push("--config");
-            //cargo_args.push(`build.rustflags=["-Z", "location-detail=none", "-Z", "fmt-debug=none"]`);
+        if (this.options.experimental.synchronous == null) {
+            this.options.experimental.synchronous = false;
         }
     }
 
-    if (options.cargoArgs) {
-        cargo_args = cargo_args.concat(options.cargoArgs);
+    checkDeprecations(cx) {
+        if (this.options.debug != null) {
+            cx.warn("The `debug` option has been changed to `optimize.release`");
+        }
+
+        if (this.options.cargoArgs != null) {
+            cx.warn("The `cargoArgs` option has been changed to `extraArgs.cargo`");
+        }
+
+        if (this.options.wasmBindgenArgs != null) {
+            cx.warn("The `wasmBindgenArgs` option has been changed to `extraArgs.wasmBindgen`");
+        }
+
+        if (this.options.wasmOptArgs != null) {
+            cx.warn("The `wasmOptArgs` option has been changed to `extraArgs.wasmOpt`");
+        }
+
+        if (this.options.serverPath != null) {
+            cx.warn("The `serverPath` option is deprecated and no longer works");
+        }
+
+        if (this.options.importHook != null) {
+            cx.warn("The `importHook` option is deprecated and no longer works");
+        }
+
+        if (this.options.experimental.directExports != null) {
+            cx.warn("The `experimental.directExports` option is deprecated and no longer works");
+        }
     }
 
-    /*cargo_args.push("--");
 
-    if (options.multithreading) {
-        cargo_args.push("-C", "target-feature=+atomics,+bulk-memory,+mutable-globals");
+    async watchFiles(cx, dir) {
+        if (this.watch) {
+            const matches = await Promise.all(this.options.watchPatterns.map((pattern) => glob(pattern, dir)));
+
+            // TODO deduplicate matches ?
+            matches.forEach(function (files) {
+                files.forEach(function (file) {
+                    cx.addWatchFile(file);
+                });
+            });
+        }
     }
 
-    if (options.rustArgs) {
-        cargo_args = cargo_args.concat(options.rustArgs);
-    }*/
 
-    if (options.verbose) {
-        debug(`Running cargo ${cargo_args.join(" ")}`);
+    async getNightly(dir) {
+        let nightly = this.cache.nightly[dir];
+
+        if (nightly == null) {
+            nightly = this.cache.nightly[dir] = $cargo.getNightly(dir);
+        }
+
+        return await nightly;
     }
 
-    await spawn(cargo_exec, cargo_args, { cwd: dir, stdio: "inherit" });
-}
 
+    async getTargetDir(dir) {
+        let targetDir = this.cache.targetDir[dir];
 
-// Replace with @webassemblyjs/wasm-opt ?
-async function run_wasm_opt(cx, out_dir, options) {
-    const path = "index_bg.wasm";
-    const tmp = "wasm_opt.wasm";
+        if (targetDir == null) {
+            targetDir = this.cache.targetDir[dir] = $cargo.getTargetDir(dir);
+        }
 
-    // Needed to make wasm-opt work on Windows
-    const wasm_opt_command = getEnv("WASM_OPT_BIN", (process.platform === "win32" ? "wasm-opt.cmd" : "wasm-opt"));
-
-    const wasm_opt_args = [path, "--output", tmp].concat(options.wasmOptArgs);
-
-    if (options.verbose) {
-        debug(`Running ${wasm_opt_command} ${wasm_opt_args.join(" ")}`);
+        return await targetDir;
     }
 
-    try {
-        await spawn(wasm_opt_command, wasm_opt_args, { cwd: out_dir, stdio: "inherit" });
 
-    } catch (e) {
-        cx.warn("wasm-opt failed: " + e.message);
-        return;
-    }
+    async getWasmBindgen(dir) {
+        let bin = getEnv("WASM_BINDGEN_BIN", null);
 
-    await mv($path.join(out_dir, tmp), $path.join(out_dir, path));
-}
+        if (bin == null) {
+            bin = this.cache.wasmBindgen[dir];
 
-
-async function load_wasm(out_dir, options) {
-    const wasm_path = $path.join(out_dir, "index_bg.wasm");
-
-    if (options.verbose) {
-        debug(`Looking for wasm at ${wasm_path}`);
-    }
-
-    return await read(wasm_path);
-}
-
-
-async function compile_rust(cx, dir, id, target_dir, source, options, nightly) {
-    const toml = $toml.parse(source);
-
-    // TODO make this faster somehow
-    // TODO does it need to do more transformations on the name ?
-    const name = toml.package.name.replace(/\-/g, "_");
-
-    try {
-        // TODO maybe it can run `cargo fetch` without locking ?
-        return await lock(async function () {
-            if (options.verbose) {
-                debug(`Compiling ${id}`);
-                debug(`Using target directory ${target_dir}`);
+            if (bin == null) {
+                bin = this.cache.wasmBindgen[dir] = $wasmBindgen.download(dir, this.options.verbose);
             }
 
-            await run_cargo(dir, options, nightly);
+            return await bin;
 
-            const wasm_path = $path.resolve($path.join(
-                target_dir,
+        } else {
+            return bin;
+        }
+    }
+
+
+    async loadWasm(outDir) {
+        const wasmPath = $path.join(outDir, "index_bg.wasm");
+
+        if (this.options.verbose) {
+            debug(`Looking for wasm at ${wasmPath}`);
+        }
+
+        return await read(wasmPath);
+    }
+
+
+    async compileTypescript(name, outDir) {
+        if (this.options.experimental.typescriptDeclarationDir != null) {
+            await $typescript.write(
+                name,
+                this.options.experimental.typescriptDeclarationDir,
+                outDir,
+            );
+        }
+    }
+
+
+    async compileTypescriptCustom(name, isCustom) {
+        if (isCustom && this.options.experimental.typescriptDeclarationDir != null) {
+            await $typescript.writeCustom(
+                name,
+                this.options.experimental.typescriptDeclarationDir,
+                this.options.inlineWasm,
+                this.options.experimental.synchronous,
+            );
+        }
+    }
+
+
+    async wasmOpt(cx, outDir) {
+        if (this.release) {
+            const result = await $wasmOpt.run({
+                dir: outDir,
+                input: "index_bg.wasm",
+                output: "wasm_opt.wasm",
+                extraArgs: this.options.extraArgs.wasmOpt,
+                verbose: this.options.verbose,
+            });
+
+            if (result !== null) {
+                cx.warn("wasm-opt failed: " + result.message);
+            }
+        }
+    }
+
+
+    compileInlineWasm(build) {
+        const wasmString = JSON.stringify(build.wasm.toString("base64"));
+
+        const code = `
+            const base64codes = [62,0,0,0,63,52,53,54,55,56,57,58,59,60,61,0,0,0,0,0,0,0,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,0,0,0,0,0,0,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51];
+
+            function getBase64Code(charCode) {
+                return base64codes[charCode - 43];
+            }
+
+            function base64Decode(str) {
+                let missingOctets = str.endsWith("==") ? 2 : str.endsWith("=") ? 1 : 0;
+                let n = str.length;
+                let result = new Uint8Array(3 * (n / 4));
+                let buffer;
+
+                for (let i = 0, j = 0; i < n; i += 4, j += 3) {
+                    buffer =
+                        getBase64Code(str.charCodeAt(i)) << 18 |
+                        getBase64Code(str.charCodeAt(i + 1)) << 12 |
+                        getBase64Code(str.charCodeAt(i + 2)) << 6 |
+                        getBase64Code(str.charCodeAt(i + 3));
+                    result[j] = buffer >> 16;
+                    result[j + 1] = (buffer >> 8) & 0xFF;
+                    result[j + 2] = buffer & 0xFF;
+                }
+
+                return result.subarray(0, result.length - missingOctets);
+            }
+
+            export default base64Decode(${wasmString});
+        `;
+
+        return {
+            code,
+            map: { mappings: '' },
+            moduleSideEffects: false,
+        };
+    }
+
+
+    compileJsInline(build, isCustom) {
+        let mainCode;
+        let sideEffects;
+
+        if (this.options.experimental.synchronous) {
+            if (isCustom) {
+                sideEffects = false;
+
+                mainCode = `export { module };
+
+                export function init(options) {
+                    exports.initSync({
+                        module: options.module,
+                        memory: options.memory,
+                    });
+                    return exports;
+                }`
+
+            } else {
+                sideEffects = true;
+
+                mainCode = `
+                    exports.initSync({ module });
+                    export * from ${build.importPath};
+                `;
+            }
+
+        } else {
+            if (isCustom) {
+                sideEffects = false;
+
+                mainCode = `export { module };
+
+                export async function init(options) {
+                    await exports.default({
+                        module_or_path: await options.module,
+                        memory: options.memory,
+                    });
+                    return exports;
+                }`;
+
+            } else {
+                sideEffects = true;
+
+                mainCode = `
+                    await exports.default({ module_or_path: module });
+                    export * from ${build.importPath};
+                `;
+            }
+        }
+
+
+        const wasmString = JSON.stringify(build.wasm.toString("base64"));
+
+        const code = `
+            import * as exports from ${build.importPath};
+
+            import module from "${INLINE_ID}";
+
+            ${mainCode}
+        `;
+
+        return {
+            code,
+            map: { mappings: '' },
+            moduleSideEffects: sideEffects,
+            meta: {
+                "rollup-plugin-rust": { root: false, realPath: build.realPath }
+            },
+        };
+    }
+
+
+    compileJsNormal(build, isCustom) {
+        let wasmPath = `import.meta.ROLLUP_FILE_URL_${build.fileId}`;
+
+        let prelude;
+
+        if (this.options.nodejs) {
+            prelude = `function loadFile(url) {
+                return new Promise((resolve, reject) => {
+                    require("node:fs").readFile(url, (err, data) => {
+                        if (err) {
+                            reject(err);
+
+                        } else {
+                            resolve(data);
+                        }
+                    });
+                });
+            }
+
+            const module = loadFile(${wasmPath});`;
+
+        } else {
+            prelude = `const module = ${wasmPath};`;
+        }
+
+
+        let mainCode;
+        let sideEffects;
+
+        if (this.options.experimental.synchronous) {
+            throw new Error("synchronous option can only be used with inlineWasm: true");
+
+        } else {
+            if (isCustom) {
+                sideEffects = false;
+
+                mainCode = `export { module };
+
+                export async function init(options) {
+                    await exports.default({
+                        module_or_path: await options.module,
+                        memory: options.memory,
+                    });
+                    return exports;
+                }`;
+
+            } else {
+                sideEffects = true;
+
+                mainCode = `
+                    await exports.default({ module_or_path: module });
+                    export * from ${build.importPath};
+                `;
+            }
+        }
+
+        return {
+            code: `
+                import * as exports from ${build.importPath};
+
+                ${prelude}
+                ${mainCode}
+            `,
+            map: { mappings: '' },
+            moduleSideEffects: sideEffects,
+            meta: {
+                "rollup-plugin-rust": { root: false, realPath: build.realPath }
+            },
+        };
+    }
+
+
+    compileJs(build, isCustom) {
+        if (this.options.inlineWasm) {
+            return this.compileJsInline(build, isCustom);
+
+        } else {
+            return this.compileJsNormal(build, isCustom);
+        }
+    }
+
+
+    async compileRust(cx, dir, id, targetDir, source, nightly) {
+        const toml = $toml.parse(source);
+
+        // TODO make this faster somehow
+        // TODO does it need to do more transformations on the name ?
+        const name = toml.package.name.replace(/\-/g, "_");
+
+        try {
+            if (this.options.verbose) {
+                debug(`Compiling ${id}`);
+                debug(`Using target directory ${targetDir}`);
+            }
+
+            await $cargo.run({
+                dir,
+                nightly,
+                verbose: this.options.verbose,
+                extraArgs: this.options.extraArgs.cargo,
+                release: this.release,
+                optimize: this.options.optimize.rustc,
+            });
+
+            const wasmPath = $path.resolve($path.join(
+                targetDir,
                 "wasm32-unknown-unknown",
-                (options.debug ? "debug" : "release"),
+                (this.release ? "release" : "debug"),
                 name + ".wasm"
             ));
 
-            const out_dir = $path.resolve($path.join(target_dir, "rollup-plugin-rust", name));
+            const outDir = $path.resolve($path.join(targetDir, "rollup-plugin-rust", name));
 
-            if (options.verbose) {
-                debug(`Using rustc output ${wasm_path}`);
-                debug(`Using output directory ${out_dir}`);
+            if (this.options.verbose) {
+                debug(`Using rustc output ${wasmPath}`);
+                debug(`Using output directory ${outDir}`);
             }
 
-            await rm(out_dir);
+            await rm(outDir);
 
-            await run_wasm_bindgen(dir, wasm_path, out_dir, options);
-
-            if (!options.debug) {
-                await run_wasm_opt(cx, out_dir, options);
-            }
-
-            const wasm = await load_wasm(out_dir, options);
-
-            return { name, wasm, out_dir };
-        });
-
-    } catch (e) {
-        if (options.verbose) {
-            throw e;
-
-        } else {
-            const e = new Error("Rust compilation failed");
-            e.stack = null;
-            throw e;
-        }
-    }
-}
-
-
-async function watch_files(cx, dir, options) {
-    if (options.watch) {
-        const matches = await Promise.all(options.watchPatterns.map(function (pattern) {
-            return glob(pattern, dir);
-        }));
-
-        // TODO deduplicate matches ?
-        matches.forEach(function (files) {
-            files.forEach(function (file) {
-                cx.addWatchFile(file);
+            await $wasmBindgen.run({
+                bin: await this.getWasmBindgen(dir),
+                dir,
+                wasmPath,
+                outDir,
+                typescript: this.options.experimental.typescriptDeclarationDir != null,
+                extraArgs: this.options.extraArgs.wasmBindgen,
+                verbose: this.options.verbose,
             });
-        });
-    }
-}
 
+            const [wasm] = await Promise.all([
+                this.wasmOpt(cx, outDir).then(() => {
+                    return this.loadWasm(outDir);
+                }),
 
-async function build(cx, state, id, options) {
-    const dir = $path.dirname(id);
+                this.compileTypescript(name, outDir),
+            ]);
 
-    const [nightly, target_dir, source] = await Promise.all([
-        // TODO does this need to be behind the lock too ?
-        get_nightly(state, dir),
-        // TODO does this need to be behind the lock too ?
-        get_target_dir(state, dir),
-        readString(id),
-    ]);
+            let fileId;
 
-    const [output] = await Promise.all([
-        compile_rust(cx, dir, id, target_dir, source, options, nightly),
-        watch_files(cx, dir, options),
-    ]);
-
-    return output;
-}
-
-
-function compile_js_inline(options, import_path, real_path, wasm, is_entry) {
-    let export_code;
-
-    if (!is_entry && options.experimental.directExports) {
-        export_code = `export * from ${import_path};`;
-
-    } else {
-        export_code = "";
-    }
-
-
-    let main_code;
-    let sideEffects;
-
-    if (options.experimental.synchronous) {
-        if (is_entry || options.experimental.directExports) {
-            sideEffects = true;
-            main_code = `exports.initSync(wasm_code);`
-
-        } else {
-            sideEffects = false;
-            main_code = `export default () => {
-                exports.initSync(wasm_code);
-                return exports;
-            };`;
-        }
-
-    } else {
-        if (options.experimental.directExports) {
-            sideEffects = true;
-            main_code = `await exports.default(wasm_code);`;
-
-        } else if (is_entry) {
-            sideEffects = true;
-            main_code = `exports.default(wasm_code).catch(console.error);`
-
-        } else {
-            sideEffects = false;
-            main_code = `export default async (opt = {}) => {
-                let {initializeHook} = opt;
-
-                if (initializeHook != null) {
-                    await initializeHook(exports.default, wasm_code);
-
-                } else {
-                    await exports.default(wasm_code);
-                }
-
-                return exports;
-            };`;
-        }
-    }
-
-
-    const wasm_string = JSON.stringify(wasm.toString("base64"));
-
-    const code = `
-        ${export_code}
-        import * as exports from ${import_path};
-
-        const base64codes = [62,0,0,0,63,52,53,54,55,56,57,58,59,60,61,0,0,0,0,0,0,0,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,0,0,0,0,0,0,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51];
-
-        function getBase64Code(charCode) {
-            return base64codes[charCode - 43];
-        }
-
-        function base64_decode(str) {
-            let missingOctets = str.endsWith("==") ? 2 : str.endsWith("=") ? 1 : 0;
-            let n = str.length;
-            let result = new Uint8Array(3 * (n / 4));
-            let buffer;
-
-            for (let i = 0, j = 0; i < n; i += 4, j += 3) {
-                buffer =
-                    getBase64Code(str.charCodeAt(i)) << 18 |
-                    getBase64Code(str.charCodeAt(i + 1)) << 12 |
-                    getBase64Code(str.charCodeAt(i + 2)) << 6 |
-                    getBase64Code(str.charCodeAt(i + 3));
-                result[j] = buffer >> 16;
-                result[j + 1] = (buffer >> 8) & 0xFF;
-                result[j + 2] = buffer & 0xFF;
-            }
-
-            return result.subarray(0, result.length - missingOctets);
-        }
-
-        const wasm_code = base64_decode(${wasm_string});
-
-        ${main_code}
-    `;
-
-
-    return {
-        code,
-        map: { mappings: '' },
-        moduleSideEffects: sideEffects,
-        meta: {
-            "rollup-plugin-rust": { root: false, real_path }
-        },
-    };
-}
-
-
-function compile_js_load(cx, state, options, import_path, real_path, name, wasm, is_entry) {
-    let fileId;
-
-    if (options.outDir == null) {
-        fileId = cx.emitFile({
-            type: "asset",
-            source: wasm,
-            name: name + ".wasm"
-        });
-
-    } else {
-        cx.warn("The outDir option is deprecated, use output.assetFileNames instead");
-
-        const wasm_name = $path.posix.join(options.outDir, name + ".wasm");
-
-        fileId = cx.emitFile({
-            type: "asset",
-            source: wasm,
-            fileName: wasm_name
-        });
-    }
-
-    state.file_ids.add(fileId);
-
-
-    let wasm_path = `import.meta.ROLLUP_FILE_URL_${fileId}`;
-
-    let initialize = `exports.default(final_path)`;
-
-    let prelude = "";
-
-    if (options.nodejs) {
-        prelude = `
-        function loadFile(url) {
-            return new Promise((resolve, reject) => {
-                require("fs").readFile(url, (err, data) => {
-                    if (err) {
-                        reject(err);
-
-                    } else {
-                        resolve(data);
-                    }
+            if (!this.options.inlineWasm) {
+                fileId = cx.emitFile({
+                    type: "asset",
+                    source: wasm,
+                    name: name + ".wasm"
                 });
-            });
-        }`;
 
-        initialize = `exports.default(loadFile(final_path))`;
-    }
+                this.fileIds.add(fileId);
+            }
 
+            const realPath = $path.join(outDir, "index.js");
 
-    let export_code = "";
+            // This returns a fake file path, this ensures that the directory is the
+            // same as the Cargo.toml file, which is necessary in order to make npm
+            // package imports work correctly.
+            const importPath = `"${PREFIX}${name}/index.js"`;
 
-    if (!is_entry && options.experimental.directExports) {
-        export_code = `export * from ${import_path};`;
-    }
+            return { name, outDir, importPath, realPath, wasm, fileId };
 
+        } catch (e) {
+            if (this.options.verbose) {
+                throw e;
 
-    let main_code;
-    let sideEffects;
-
-    if (options.experimental.synchronous) {
-        throw new Error("synchronous option can only be used with inlineWasm: true");
-
-    } else {
-        if (options.experimental.directExports) {
-            sideEffects = true;
-            main_code = `const final_path = wasm_path; await ${initialize};`;
-
-        } else if (is_entry) {
-            sideEffects = true;
-            main_code = `const final_path = wasm_path; ${initialize}.catch(console.error);`
-
-        } else {
-            sideEffects = false;
-            main_code = `export default async (opt = {}) => {
-                let {importHook, serverPath, initializeHook} = opt;
-
-                let final_path = wasm_path;
-
-                if (serverPath != null) {
-                    final_path = serverPath + /[^\\/\\\\]*$/.exec(final_path)[0];
-                }
-
-                if (importHook != null) {
-                    final_path = importHook(final_path);
-                }
-
-                if (initializeHook != null) {
-                    await initializeHook(exports.default, final_path);
-
-                } else {
-                    await ${initialize};
-                }
-
-                return exports;
-            };`;
+            } else {
+                const e = new Error("Rust compilation failed");
+                e.stack = null;
+                throw e;
+            }
         }
     }
 
 
-    return {
-        code: `
-            ${export_code}
-            import * as exports from ${import_path};
+    async build(cx, dir, id) {
+        // Starts the download for wasm-bindgen early
+        this.getWasmBindgen(dir);
 
-            const wasm_path = ${wasm_path};
-
-            ${prelude}
-            ${main_code}
-
-            export const __META__ = {
-                wasm_bindgen: {
-                    js_path: ${import_path},
-                    wasm_path: wasm_path,
-                },
-            };
-        `,
-        map: { mappings: '' },
-        moduleSideEffects: sideEffects,
-        meta: {
-            "rollup-plugin-rust": { root: false, real_path }
-        },
-    };
-}
-
-
-function compile_js(cx, state, name, wasm, is_entry, out_dir, options) {
-    const real_path = $path.join(out_dir, "index.js");
-
-    // This returns a fake file path, this ensures that the directory is the
-    // same as the Cargo.toml file, which is necessary in order to make npm
-    // package imports work correctly.
-    const import_path = `"${PREFIX}${name}/index.js"`;
-
-    if (options.inlineWasm) {
-        return compile_js_inline(options, import_path, real_path, wasm, is_entry);
-
-    } else {
-        return compile_js_load(cx, state, options, import_path, real_path, name, wasm, is_entry);
-    }
-}
-
-function trim(s) {
-    return s.replace(/\n\n\n+/g, "\n\n").replace(/\n\n+\}/g, "\n}").trim();
-}
-
-function parse_dts(declaration, options) {
-    declaration = declaration.replace(/export type InitInput = [\s\S]*/g, "");
-    return trim(declaration);
-}
-
-async function compile_dts_init(out_path, name, options) {
-    if (!options.experimental.directExports) {
-        const output = `export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
-
-export type InitOutput = typeof import("./${name}");
-
-export interface InitOptions {
-    serverPath?: string;
-
-    importHook?: (path: string) => InitInput | Promise<InitInput>;
-
-    initializeHook?: (
-        init: (path: InitInput | Promise<InitInput>, memory?: WebAssembly.Memory) => void,
-        path: InitInput | Promise<InitInput>,
-    ) => Promise<void>;
-}
-
-declare const init: (options?: InitOptions) => Promise<InitOutput>;
-export default init;
-`;
-
-        await writeString(out_path, output);
-    }
-}
-
-
-async function compile_dts(cx, state, name, out_dir, options) {
-    const dir = options.experimental.typescriptDeclarationDir;
-
-    if (dir != null) {
-        const real_path = $path.join(out_dir, "index.d.ts");
-
-        const [declaration] = await Promise.all([
-            readString(real_path),
-            mkdir(dir),
+        const [nightly, targetDir, source] = await Promise.all([
+            this.getNightly(dir),
+            this.getTargetDir(dir),
+            readString(id),
         ]);
 
-        await Promise.all([
-            writeString($path.join(dir, name + ".d.ts"), parse_dts(declaration, options)),
-            compile_dts_init($path.join(dir, name + "_init.d.ts"), name, options),
-        ]);
-    }
-}
-
-
-async function load_cargo_toml(cx, state, id, is_entry, meta, options) {
-    let result = state.cargo_toml_cache[id];
-
-    if (result == null) {
-        result = state.cargo_toml_cache[id] = build(cx, state, id, options);
+        return await this.compileRust(cx, dir, id, targetDir, source, nightly);
     }
 
-    result = await result;
 
-    await compile_dts(cx, state, result.name, result.out_dir, options);
+    async load(cx, oldId) {
+        const id = stripPath(oldId);
 
-    return compile_js(cx, state, result.name, result.wasm, is_entry, result.out_dir, options);
+        let promise = this.cache.build[id];
+
+        if (promise == null) {
+            const dir = $path.dirname(id);
+
+            promise = this.cache.build[id] = Promise.all([
+                this.build(cx, dir, id),
+                this.watchFiles(cx, dir),
+            ]);
+        }
+
+        const [build] = await promise;
+
+        if (oldId.endsWith("?inline")) {
+            return this.compileInlineWasm(build);
+
+        } else {
+            const isCustom = oldId.endsWith("?custom");
+
+            const [result] = await Promise.all([
+                this.compileJs(build, isCustom),
+                this.compileTypescriptCustom(build.name, isCustom),
+            ]);
+
+            return result;
+        }
+    }
 }
 
 
@@ -562,57 +576,9 @@ export default function rust(options = {}) {
     // TODO should the filter affect the Rust compilation ?
     const filter = createFilter(options.include, options.exclude);
 
-    const state = {
-        // Whether the plugin is running in Vite or not
-        vite: false,
-        file_ids: new Set(),
-        nightly_dir_cache: {},
-        target_dir_cache: {},
-        cargo_toml_cache: {},
-    };
+    const state = new State(options);
 
-    if (options.watchPatterns == null) {
-        options.watchPatterns = [
-            "src/**"
-        ];
-    }
-
-    if (options.importHook == null) {
-        options.importHook = function (path) { return JSON.stringify(path); };
-    }
-
-    if (options.serverPath == null) {
-        options.serverPath = "";
-    }
-
-    if (options.wasmOptArgs == null) {
-        // TODO figure out better optimization options ?
-        options.wasmOptArgs = ["-O"];
-    }
-
-    if (options.inlineWasm == null) {
-        options.inlineWasm = false;
-    }
-
-    if (options.verbose == null) {
-        options.verbose = false;
-    }
-
-    if (options.nodejs == null) {
-        options.nodejs = false;
-    }
-
-    if (options.experimental == null) {
-        options.experimental = {};
-    }
-
-    if (options.experimental.directExports == null) {
-        options.experimental.directExports = false;
-    }
-
-    if (options.experimental.synchronous == null) {
-        options.experimental.synchronous = false;
-    }
+    state.setDefaults();
 
     return {
         name: "rust",
@@ -624,82 +590,76 @@ export default function rust(options = {}) {
             if (config.command !== "build") {
                 // We have to force inlineWasm during dev because Vite doesn't support emitFile
                 // https://github.com/vitejs/vite/issues/7029
-                options.inlineWasm = true;
+                state.options.inlineWasm = true;
             }
         },
 
         buildStart(rollup) {
-            state.file_ids.clear();
-            state.nightly_dir_cache = {};
-            state.target_dir_cache = {};
-            state.cargo_toml_cache = {};
+            state.reset();
 
-            if (options.wasmPackPath !== undefined) {
-                this.warn("The wasmPackPath option is deprecated and no longer works");
-            }
+            state.checkDeprecations(this);
 
-            if (this.meta.watchMode || rollup.watch) {
-                if (options.watch == null) {
-                    options.watch = true;
-                }
+            state.watch = this.meta.watchMode || rollup.watch;
 
-                if (options.debug == null) {
-                    options.debug = true;
-                }
-            }
+            state.release = (state.options.optimize.release == null
+                ? !state.watch
+                : state.options.optimize.release);
         },
 
         // This is only compatible with Rollup 2.78.0 and higher
         resolveId: {
             order: "pre",
             handler(id, importer, info) {
-                if ($path.basename(id) === "Cargo.toml" && filter(id)) {
-                    const path = (importer ? $path.resolve($path.dirname(importer), id) : $path.resolve(id));
+                if (id === INLINE_ID) {
+                    return {
+                        id: stripPath(importer) + "?inline",
+                        meta: {
+                            "rollup-plugin-rust": { root: true }
+                        }
+                    };
 
-                    // This adds a suffix so that the load hook can reliably detect whether it's an entry or not.
-                    // This is needed because isEntry is ONLY reliable inside of resolveId.
-                    if (info.isEntry) {
-                        return {
-                            id: `${path}${ENTRY_SUFFIX}`,
-                            meta: {
-                                "rollup-plugin-rust": { root: true }
-                            }
-                        };
+                } else {
+                    const name = $path.basename(id);
 
-                    } else {
+                    const normal = (name === "Cargo.toml");
+                    const custom = (name === "Cargo.toml?custom");
+
+                    if ((normal || custom) && filter(id)) {
+                        const path = (importer ? $path.resolve($path.dirname(importer), id) : $path.resolve(id));
+
                         return {
                             id: path,
-                            moduleSideEffects: false,
+                            moduleSideEffects: !custom,
                             meta: {
                                 "rollup-plugin-rust": { root: true }
                             }
                         };
-                    }
 
-                // Rewrites the fake file paths to real file paths.
-                } else if (importer && id[0] === ".") {
-                    const info = this.getModuleInfo(importer);
+                    // Rewrites the fake file paths to real file paths.
+                    } else if (importer && id[0] === ".") {
+                        const info = this.getModuleInfo(importer);
 
-                    if (info && info.meta) {
-                        const meta = info.meta["rollup-plugin-rust"];
+                        if (info && info.meta) {
+                            const meta = info.meta["rollup-plugin-rust"];
 
-                        if (meta && !meta.root) {
-                            // TODO maybe use resolve ?
-                            const path = $path.join($path.dirname(importer), id);
+                            if (meta && !meta.root) {
+                                // TODO maybe use resolve ?
+                                const path = $path.join($path.dirname(importer), id);
 
-                            const real_path = (id.startsWith(PREFIX)
-                                ? meta.real_path
-                                : $path.join($path.dirname(meta.real_path), id));
+                                const realPath = (id.startsWith(PREFIX)
+                                    ? meta.realPath
+                                    : $path.join($path.dirname(meta.realPath), id));
 
-                            return {
-                                id: path,
-                                meta: {
-                                    "rollup-plugin-rust": {
-                                        root: false,
-                                        real_path,
+                                return {
+                                    id: path,
+                                    meta: {
+                                        "rollup-plugin-rust": {
+                                            root: false,
+                                            realPath,
+                                        }
                                     }
-                                }
-                            };
+                                };
+                            }
                         }
                     }
                 }
@@ -718,42 +678,24 @@ export default function rust(options = {}) {
                     if (meta.root) {
                         // This causes Vite to load a noop module during SSR
                         if (state.vite && loadState && loadState.ssr) {
-                            if (id.endsWith(ENTRY_SUFFIX)) {
-                                return {
-                                    code: ``,
-                                    map: { mappings: '' },
-                                    moduleSideEffects: false,
-                                };
-
-                            } else {
-                                return {
-                                    code: `
-                                        export default async function (opt = {}) {
-                                            return {};
-                                        }
-                                    `,
-                                    map: { mappings: '' },
-                                    moduleSideEffects: false,
-                                };
-                            }
+                            return {
+                                code: `export {};`,
+                                map: { mappings: '' },
+                                moduleSideEffects: false,
+                            };
 
                         // This compiles the Cargo.toml
                         } else {
-                            if (id.endsWith(ENTRY_SUFFIX)) {
-                                return load_cargo_toml(this, state, id.slice(0, -ENTRY_SUFFIX.length), true, meta, options);
-
-                            } else {
-                                return load_cargo_toml(this, state, id, false, meta, options);
-                            }
+                            return state.load(this, id);
                         }
 
                     } else {
                         if (options.verbose) {
-                            debug(`Loading file ${meta.real_path}`);
+                            debug(`Loading file ${meta.realPath}`);
                         }
 
                         // This maps the fake path to a real path on disk and loads it
-                        return readString(meta.real_path);
+                        return readString(meta.realPath);
                     }
                 }
             }
@@ -762,8 +704,8 @@ export default function rust(options = {}) {
         },
 
         resolveFileUrl(info) {
-            if (state.file_ids.has(info.referenceId)) {
-                return options.importHook(options.serverPath + info.fileName);
+            if (state.fileIds.has(info.referenceId)) {
+                return `new URL(${JSON.stringify(info.fileName)}, import.meta.url)`;
 
             } else {
                 return null;

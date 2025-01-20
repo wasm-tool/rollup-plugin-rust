@@ -1,10 +1,10 @@
 import * as $path from "node:path";
 import * as $tar from "tar";
 import * as $fetch from "node-fetch";
-import { exec, mkdir, get_cache_dir, tar, exists, spawn, info, debug, getEnv } from "./utils.js";
+import { exec, mkdir, getCacheDir, tar, exists, spawn, info, debug, getEnv } from "./utils.js";
 
 
-function wasm_bindgen_name(version) {
+function getName(version) {
     switch (process.platform) {
     case "win32":
         return `wasm-bindgen-${version}-x86_64-pc-windows-msvc`;
@@ -25,11 +25,13 @@ function wasm_bindgen_name(version) {
     }
 }
 
-function wasm_bindgen_url(version, name) {
-    return `https://github.com/rustwasm/wasm-bindgen/releases/download/${version}/${name}.tar.gz`
+
+function getUrl(version, name) {
+    return `https://github.com/rustwasm/wasm-bindgen/releases/download/${version}/${name}.tar.gz`;
 }
 
-function wasm_bindgen_path(dir) {
+
+function getPath(dir) {
     if (process.platform === "win32") {
         return $path.join(dir, "wasm-bindgen.exe");
     } else {
@@ -38,13 +40,11 @@ function wasm_bindgen_path(dir) {
 }
 
 
-const VERSION_REGEXP = /([\d\.]+)[\r\n]*$/;
+async function getVersion(dir) {
+    const bin = getEnv("CARGO_BIN", "cargo");
+    const spec = await exec(`${bin} pkgid wasm-bindgen`, { cwd: dir });
 
-async function wasm_bindgen_version(dir) {
-    const cargo_exec = getEnv("CARGO_BIN", "cargo");
-    const pkg_spec = await exec(`${cargo_exec} pkgid wasm-bindgen`, { cwd: dir });
-
-    const version = VERSION_REGEXP.exec(pkg_spec);
+    const version = /([\d\.]+)[\r\n]*$/.exec(spec);
 
     if (version) {
         return version[1];
@@ -55,69 +55,58 @@ async function wasm_bindgen_version(dir) {
 }
 
 
-async function download_wasm_bindgen(url, dir) {
-    const response = await $fetch(url);
+export async function download(dir, verbose) {
+    const version = await getVersion(dir);
+    const name = getName(version);
 
-    if (!response.ok) {
-        throw new Error(`Could not download wasm-bindgen: ${response.statusText}`);
-    }
+    const cache = getCacheDir("rollup-plugin-rust");
 
-    await tar(response.body, {
-        cwd: dir,
-    });
-}
+    await mkdir(cache);
 
+    const path = getPath($path.join(cache, name));
 
-async function get_wasm_bindgen(dir, options) {
-    const version = await wasm_bindgen_version(dir);
-    const name = wasm_bindgen_name(version);
-
-    const cache_dir = get_cache_dir("rollup-plugin-rust");
-    await mkdir(cache_dir);
-
-    const path = wasm_bindgen_path($path.join(cache_dir, name));
-
-    if (options.verbose) {
+    if (verbose) {
         debug(`Searching for wasm-bindgen at ${path}`);
     }
 
     if (!(await exists(path))) {
         info(`Downloading wasm-bindgen version ${version}`);
-        await download_wasm_bindgen(wasm_bindgen_url(version, name), cache_dir);
+
+        const response = await $fetch(getUrl(version, name));
+
+        if (!response.ok) {
+            throw new Error(`Could not download wasm-bindgen: ${response.statusText}`);
+        }
+
+        await tar(response.body, {
+            cwd: cache,
+        });
     }
 
     return path;
 }
 
 
-export async function run_wasm_bindgen(dir, wasm_path, out_dir, options) {
-    let wasm_bindgen_command = getEnv("WASM_BINDGEN_BIN", null);
-
-    if (wasm_bindgen_command == null) {
-        wasm_bindgen_command = await get_wasm_bindgen(dir, options);
-    }
-
+export async function run({ bin, dir, wasmPath, outDir, typescript, extraArgs, verbose }) {
     // TODO what about --debug --no-demangle --keep-debug ?
-    let wasm_bindgen_args = [
-        "--out-dir", out_dir,
+    let args = [
+        "--out-dir", outDir,
         "--out-name", "index",
         "--target", "web",
         "--omit-default-module-path",
     ];
 
-    if (options.experimental.typescriptDeclarationDir == null) {
-        wasm_bindgen_args.push("--no-typescript");
+    if (!typescript) {
+        args.push("--no-typescript");
     }
 
-    wasm_bindgen_args.push(wasm_path);
+    args.push(wasmPath);
 
-    if (options.wasmBindgenArgs) {
-        wasm_bindgen_args = wasm_bindgen_args.concat(options.wasmBindgenArgs);
+    args = args.concat(extraArgs);
+
+    if (verbose) {
+        debug(`Running wasm-bindgen ${args.join(" ")}`);
     }
 
-    if (options.verbose) {
-        debug(`Running wasm-bindgen ${wasm_bindgen_args.join(" ")}`);
-    }
-
-    await spawn(wasm_bindgen_command, wasm_bindgen_args, { cwd: dir, stdio: "inherit" });
+    await spawn(bin, args, { cwd: dir, stdio: "inherit" });
 }

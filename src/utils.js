@@ -5,29 +5,29 @@ import * as $os from "node:os";
 import * as $child from "node:child_process";
 
 import * as $glob from "glob";
-import * as $chalk from "chalk";
 import * as $rimraf from "rimraf";
 import * as $tar from "tar";
+import $chalk from "chalk";
 
 
-export function get_cache_dir(name) {
+export function getCacheDir(name) {
     switch (process.platform) {
     case "win32":
-        const local_app_data = process.env.LOCALAPPDATA || $path.join($os.homedir(), "AppData", "Local");
-        return $path.join(local_app_data, name, "Cache");
+        const localAppData = process.env.LOCALAPPDATA || $path.join($os.homedir(), "AppData", "Local");
+        return $path.join(localAppData, name, "Cache");
 
     case "darwin":
         return $path.join($os.homedir(), "Library", "Caches", name);
 
     // https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
     default:
-        const cache_dir = process.env.XDG_CACHE_HOME || $path.join($os.homedir(), ".cache");
-        return $path.join(cache_dir, name);
+        const cacheDir = process.env.XDG_CACHE_HOME || $path.join($os.homedir(), ".cache");
+        return $path.join(cacheDir, name);
     }
 }
 
 
-export function posix_path(path) {
+export function posixPath(path) {
     return path.replace(/\\/g, $path.posix.sep);
 }
 
