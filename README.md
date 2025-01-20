@@ -61,21 +61,7 @@ import { foo, bar } from "./path/to/Cargo.toml";
 
 ----
 
-## Tips
-
-### Workspaces
-
-When compiling multiple crates it is highly recommended to use a [workspace](https://doc.rust-lang.org/cargo/reference/manifest.html#the-workspace-section) to improve compile times.
-
-Create a `Cargo.toml` file in the root of your project which lists out the sub-crates that are a part of the workspace:
-
-```toml
-[workspace]
-members = [
-    "src/foo",
-    "src/bar",
-]
-```
+## Extra Tips
 
 
 ### Nightly
@@ -92,6 +78,21 @@ targets = [ "wasm32-unknown-unknown" ]
 ```
 
 You can change the `channel` to upgrade to the latest nightly version (or downgrade to a past nightly version).
+
+
+### Workspaces
+
+When compiling multiple crates it is highly recommended to use a [workspace](https://doc.rust-lang.org/cargo/reference/manifest.html#the-workspace-section) to improve compile times.
+
+Create a `Cargo.toml` file in the root of your project which lists out the sub-crates that are a part of the workspace:
+
+```toml
+[workspace]
+members = [
+    "src/foo",
+    "src/bar",
+]
+```
 
 
 ### Optimizing for size
