@@ -11,8 +11,8 @@
   "main": "src/index.js",
   "scripts": {
     "test:foo": "cd tests/src/foo && yarn install",
-    "test": "yarn test:foo && cd tests && rimraf dist/js && rollup --bundleConfigAsCjs --config",
-    "test:watch": "yarn test:foo && cd tests && rimraf dist/js && rollup --bundleConfigAsCjs --config --watch",
+    "test": "yarn test:foo && cd tests && rimraf dist/js && rollup --config",
+    "test:watch": "yarn test:foo && cd tests && rimraf dist/js && rollup --config --watch",
     "test:serve": "live-server tests/dist"
   },
   "directories": {
@@ -42,6 +42,7 @@
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.2",
     "@rollup/plugin-node-resolve": "^16.0.0",
+    "binaryen": "^121.0.0",
     "live-server": "^1.2.2",
     "rollup": "^4.30.1"
   },

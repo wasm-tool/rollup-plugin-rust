@@ -1,5 +1,5 @@
-import foo1 from "./foo/Cargo.toml";
-import foo2 from "./foo/Cargo.toml";
+import * as foo1 from "./foo/Cargo.toml?custom";
+import * as foo2 from "./foo/Cargo.toml?custom";
 
-foo1().catch(console.error);
-foo2().catch(console.error);
+await foo1.init({ module: foo1.module });
+await foo2.init({ module: foo2.module });

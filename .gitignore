@@ -6,3 +6,4 @@ yarn-error.log
 /typescript
 /example-multi
 .DS_Store
+.yarn
