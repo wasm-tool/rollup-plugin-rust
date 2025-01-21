@@ -6,6 +6,10 @@ import { getEnv, debug, spawn, mv } from "./utils.js";
 export async function run({ dir, input, output, extraArgs, verbose }) {
     // Needed to make wasm-opt work on Windows
     const bin = getEnv("WASM_OPT_BIN", (process.platform === "win32" ? "wasm-opt.cmd" : "wasm-opt"));
+    const options = { cwd: dir, stdio: "inherit" };
+    if (process.platform === "win32") {
+        options.shell = true;
+    }
 
     const args = [input, "--output", output].concat(extraArgs);
 
@@ -14,7 +18,7 @@ export async function run({ dir, input, output, extraArgs, verbose }) {
     }
 
     try {
-        await spawn(bin, args, { cwd: dir, stdio: "inherit" });
+        await spawn(bin, args, options);
 
     } catch (e) {
         return e;
