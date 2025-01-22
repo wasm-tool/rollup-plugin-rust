@@ -14,7 +14,7 @@ export async function run({ dir, input, output, extraArgs, verbose }) {
     }
 
     try {
-        await spawn(bin, args, { cwd: dir, stdio: "inherit" });
+        await spawn(bin, args, { cwd: dir, shell: true, stdio: "inherit" });
 
     } catch (e) {
         return e;
