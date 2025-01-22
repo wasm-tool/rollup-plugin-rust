@@ -1,6 +1,6 @@
 import * as $path from "node:path";
 import * as $tar from "tar";
-import * as $fetch from "node-fetch";
+import $fetch from "node-fetch";
 import { exec, mkdir, getCacheDir, tar, exists, spawn, info, debug, getEnv } from "./utils.js";
 
 
