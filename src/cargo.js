@@ -1,4 +1,7 @@
-import { getEnv, exec, debug, spawn } from "./utils.js";
+import { getEnv, exec, debug, spawn, Lock } from "./utils.js";
+
+
+const GLOBAL_LOCK = new Lock();
 
 
 export async function getNightly(dir) {
@@ -18,6 +21,21 @@ export async function getTargetDir(dir) {
     const metadata = await exec(`${bin} metadata --format-version 1 --no-deps --color never`, { cwd: dir });
 
     return JSON.parse(metadata)["target_directory"];
+}
+
+
+export async function getVersion(dir, name) {
+    const bin = getEnv("CARGO_BIN", "cargo");
+    const spec = await exec(`${bin} pkgid ${name}`, { cwd: dir });
+
+    const version = /([\d\.]+)[\r\n]*$/.exec(spec);
+
+    if (version) {
+        return version[1];
+
+    } else {
+        throw new Error(`Could not determine ${name} version`);
+    }
 }
 
 
@@ -91,9 +109,11 @@ export async function run({ dir, verbose, extraArgs, release, optimize, nightly 
         args = args.concat(this.options.rustArgs);
     }*/
 
-    if (verbose) {
-        debug(`Running cargo ${args.join(" ")}`);
-    }
+    await GLOBAL_LOCK.withLock(async () => {
+        if (verbose) {
+            debug(`Running cargo ${args.join(" ")}`);
+        }
 
-    await spawn(cargoBin, args, { cwd: dir, stdio: "inherit" });
+        await spawn(cargoBin, args, { cwd: dir, stdio: "inherit" });
+    });
 }

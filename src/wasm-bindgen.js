@@ -1,6 +1,7 @@
 import * as $path from "node:path";
 import * as $tar from "tar";
 import $fetch from "node-fetch";
+import { getVersion } from "./cargo.js";
 import { exec, mkdir, getCacheDir, tar, exists, spawn, info, debug, getEnv } from "./utils.js";
 
 
@@ -40,23 +41,8 @@ function getPath(dir) {
 }
 
 
-async function getVersion(dir) {
-    const bin = getEnv("CARGO_BIN", "cargo");
-    const spec = await exec(`${bin} pkgid wasm-bindgen`, { cwd: dir });
-
-    const version = /([\d\.]+)[\r\n]*$/.exec(spec);
-
-    if (version) {
-        return version[1];
-
-    } else {
-        throw new Error("Could not determine wasm-bindgen version");
-    }
-}
-
-
 export async function download(dir, verbose) {
-    const version = await getVersion(dir);
+    const version = await getVersion(dir, "wasm-bindgen");
     const name = getName(version);
 
     const cache = getCacheDir("rollup-plugin-rust");

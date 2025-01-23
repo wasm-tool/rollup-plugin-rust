@@ -434,82 +434,108 @@ class State {
     }
 
 
-    async compileRust(cx, dir, id, targetDir, source, nightly) {
+    async getInfo(dir, id) {
+        const [targetDir, source] = await Promise.all([
+            this.getTargetDir(dir),
+            readString(id),
+        ]);
+
         const toml = $toml.parse(source);
 
         // TODO make this faster somehow
         // TODO does it need to do more transformations on the name ?
         const name = toml.package.name.replace(/\-/g, "_");
 
+        const wasmPath = $path.resolve($path.join(
+            targetDir,
+            "wasm32-unknown-unknown",
+            (this.release ? "release" : "debug"),
+            name + ".wasm"
+        ));
+
+        const outDir = $path.resolve($path.join(targetDir, "rollup-plugin-rust", name));
+
+        if (this.options.verbose) {
+            debug(`Using target directory ${targetDir}`);
+            debug(`Using rustc output ${wasmPath}`);
+            debug(`Using output directory ${outDir}`);
+        }
+
+        await rm(outDir);
+
+        return { name, wasmPath, outDir };
+    }
+
+
+    async buildCargo(dir) {
+        const nightly = await this.getNightly(dir);
+
+        await $cargo.run({
+            dir,
+            nightly,
+            verbose: this.options.verbose,
+            extraArgs: this.options.extraArgs.cargo,
+            release: this.release,
+            optimize: this.options.optimize.rustc,
+        });
+    }
+
+
+    async buildWasm(cx, dir, bin, name, wasmPath, outDir) {
+        await $wasmBindgen.run({
+            bin,
+            dir,
+            wasmPath,
+            outDir,
+            typescript: this.options.experimental.typescriptDeclarationDir != null,
+            extraArgs: this.options.extraArgs.wasmBindgen,
+            verbose: this.options.verbose,
+        });
+
+        const [wasm] = await Promise.all([
+            this.wasmOpt(cx, outDir).then(() => {
+                return this.loadWasm(outDir);
+            }),
+
+            this.compileTypescript(name, outDir),
+        ]);
+
+        let fileId;
+
+        if (!this.options.inlineWasm) {
+            fileId = cx.emitFile({
+                type: "asset",
+                source: wasm,
+                name: name + ".wasm"
+            });
+
+            this.fileIds.add(fileId);
+        }
+
+        const realPath = $path.join(outDir, "index.js");
+
+        // This returns a fake file path, this ensures that the directory is the
+        // same as the Cargo.toml file, which is necessary in order to make npm
+        // package imports work correctly.
+        const importPath = `"${PREFIX}${name}/index.js"`;
+
+        return { name, outDir, importPath, realPath, wasm, fileId };
+    }
+
+
+    async build(cx, dir, id) {
         try {
             if (this.options.verbose) {
                 debug(`Compiling ${id}`);
-                debug(`Using target directory ${targetDir}`);
             }
 
-            await $cargo.run({
-                dir,
-                nightly,
-                verbose: this.options.verbose,
-                extraArgs: this.options.extraArgs.cargo,
-                release: this.release,
-                optimize: this.options.optimize.rustc,
-            });
-
-            const wasmPath = $path.resolve($path.join(
-                targetDir,
-                "wasm32-unknown-unknown",
-                (this.release ? "release" : "debug"),
-                name + ".wasm"
-            ));
-
-            const outDir = $path.resolve($path.join(targetDir, "rollup-plugin-rust", name));
-
-            if (this.options.verbose) {
-                debug(`Using rustc output ${wasmPath}`);
-                debug(`Using output directory ${outDir}`);
-            }
-
-            await rm(outDir);
-
-            await $wasmBindgen.run({
-                bin: await this.getWasmBindgen(dir),
-                dir,
-                wasmPath,
-                outDir,
-                typescript: this.options.experimental.typescriptDeclarationDir != null,
-                extraArgs: this.options.extraArgs.wasmBindgen,
-                verbose: this.options.verbose,
-            });
-
-            const [wasm] = await Promise.all([
-                this.wasmOpt(cx, outDir).then(() => {
-                    return this.loadWasm(outDir);
-                }),
-
-                this.compileTypescript(name, outDir),
+            const [bin, { name, wasmPath, outDir }] = await Promise.all([
+                this.getWasmBindgen(dir),
+                this.getInfo(dir, id),
+                this.buildCargo(dir),
             ]);
 
-            let fileId;
-
-            if (!this.options.inlineWasm) {
-                fileId = cx.emitFile({
-                    type: "asset",
-                    source: wasm,
-                    name: name + ".wasm"
-                });
-
-                this.fileIds.add(fileId);
-            }
-
-            const realPath = $path.join(outDir, "index.js");
-
-            // This returns a fake file path, this ensures that the directory is the
-            // same as the Cargo.toml file, which is necessary in order to make npm
-            // package imports work correctly.
-            const importPath = `"${PREFIX}${name}/index.js"`;
-
-            return { name, outDir, importPath, realPath, wasm, fileId };
+            return await this.buildWasm(cx, dir, bin, name, wasmPath, outDir);
 
         } catch (e) {
             if (this.options.verbose) {
@@ -521,20 +547,6 @@ class State {
                 throw e;
             }
         }
-    }
-
-
-    async build(cx, dir, id) {
-        // Starts the download for wasm-bindgen early
-        this.getWasmBindgen(dir);
-
-        const [nightly, targetDir, source] = await Promise.all([
-            this.getNightly(dir),
-            this.getTargetDir(dir),
-            readString(id),
-        ]);
-
-        return await this.compileRust(cx, dir, id, targetDir, source, nightly);
     }
 
 

@@ -208,32 +208,42 @@ export function tar(stream, options) {
 }
 
 
-const lockState = {
-    locked: false,
-    pending: [],
-};
+export class Lock {
+    constructor() {
+        this.locked = false;
+        this.pending = [];
+    }
 
-export async function lock(f) {
-    if (lockState.locked) {
-        await new Promise(function (resolve, reject) {
-            lockState.pending.push(resolve);
-        });
+    async withLock(f) {
+        await this.lock();
 
-        if (lockState.locked) {
-            throw new Error("Invalid lock state");
+        try {
+            return await f();
+
+        } finally {
+            this.unlock();
         }
     }
 
-    lockState.locked = true;
+    async lock() {
+        if (this.locked) {
+            await new Promise((resolve, reject) => {
+                this.pending.push(resolve);
+            });
 
-    try {
-        return await f();
+            if (this.locked) {
+                throw new Error("Invalid lock state");
+            }
+        }
 
-    } finally {
-        lockState.locked = false;
+        this.locked = true;
+    }
 
-        if (lockState.pending.length !== 0) {
-            const resolve = lockState.pending.shift();
+    unlock() {
+        this.locked = false;
+
+        if (this.pending.length !== 0) {
+            const resolve = this.pending.shift();
             // Wake up pending task
             resolve();
         }
