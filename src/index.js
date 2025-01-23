@@ -105,18 +105,22 @@ class State {
     checkDeprecations(cx) {
         if (this.options.debug != null) {
             cx.warn("The `debug` option has been changed to `optimize.release`");
+            this.options.optimize.release = !this.options.debug;
         }
 
         if (this.options.cargoArgs != null) {
             cx.warn("The `cargoArgs` option has been changed to `extraArgs.cargo`");
+            this.options.extraArgs.cargo = this.options.cargoArgs;
         }
 
         if (this.options.wasmBindgenArgs != null) {
             cx.warn("The `wasmBindgenArgs` option has been changed to `extraArgs.wasmBindgen`");
+            this.options.extraArgs.wasmBindgen = this.options.wasmBindgenArgs;
         }
 
         if (this.options.wasmOptArgs != null) {
             cx.warn("The `wasmOptArgs` option has been changed to `extraArgs.wasmOpt`");
+            this.options.extraArgs.wasmOpt = this.options.wasmOptArgs;
         }
 
         if (this.options.serverPath != null) {
