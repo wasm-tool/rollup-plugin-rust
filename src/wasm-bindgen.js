@@ -5,6 +5,9 @@ import { getVersion } from "./cargo.js";
 import { exec, mkdir, getCacheDir, tar, exists, spawn, info, debug, getEnv } from "./utils.js";
 
 
+const WASM_BINDGEN_CACHE = {};
+
+
 function getName(version) {
     switch (process.platform) {
     case "win32":
@@ -41,19 +44,8 @@ function getPath(dir) {
 }
 
 
-export async function download(dir, verbose) {
-    const version = await getVersion(dir, "wasm-bindgen");
-    const name = getName(version);
-
-    const cache = getCacheDir("rollup-plugin-rust");
-
-    await mkdir(cache);
-
-    const path = getPath($path.join(cache, name));
-
-    if (verbose) {
-        debug(`Searching for wasm-bindgen at ${path}`);
-    }
+async function fetchBin(dir, version, name, path) {
+    await mkdir(dir);
 
     if (!(await exists(path))) {
         info(`Downloading wasm-bindgen version ${version}`);
@@ -65,9 +57,31 @@ export async function download(dir, verbose) {
         }
 
         await tar(response.body, {
-            cwd: cache,
+            cwd: dir,
         });
     }
+}
+
+
+export async function download(dir, verbose) {
+    const version = await getVersion(dir, "wasm-bindgen");
+    const name = getName(version);
+
+    const cache = getCacheDir("rollup-plugin-rust");
+
+    const path = getPath($path.join(cache, name));
+
+    if (verbose) {
+        debug(`Searching for wasm-bindgen at ${path}`);
+    }
+
+    let promise = WASM_BINDGEN_CACHE[path];
+
+    if (promise == null) {
+        promise = WASM_BINDGEN_CACHE[path] = fetchBin(cache, version, name, path);
+    }
+
+    await promise;
 
     return path;
 }
