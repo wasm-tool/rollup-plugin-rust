@@ -1,7 +1,7 @@
 import * as $path from "node:path";
 import * as $toml from "@iarna/toml";
 import { createFilter } from "@rollup/pluginutils";
-import { glob, rm, read, readString, debug, getEnv } from "./utils.js";
+import { glob, rm, read, readString, debug, getEnv, isObject, eachObject } from "./utils.js";
 import * as $wasmBindgen from "./wasm-bindgen.js";
 import * as $cargo from "./cargo.js";
 import * as $wasmOpt from "./wasm-opt.js";
@@ -28,9 +28,79 @@ class State {
         // Whether to optimize in release mode
         this.release = true;
 
+        // Whether the options have been processed or not
+        this.processed = false;
+
         this.fileIds = new Set();
 
         this.options = options;
+
+        this.defaults = {
+            watchPatterns: ["src/**"],
+
+            inlineWasm: false,
+
+            verbose: false,
+
+            nodejs: false,
+
+            optimize: {
+                release: null,
+
+                rustc: true,
+            },
+
+            extraArgs: {
+                cargo: [],
+
+                wasmBindgen: [],
+
+                // TODO figure out better optimization options ?
+                wasmOpt: ["-O"],
+            },
+
+            experimental: {
+                synchronous: false,
+
+                typescriptDeclarationDir: null,
+            },
+        };
+
+        this.deprecations = {
+            debug: (cx, value) => {
+                cx.warn("The `debug` option has been changed to `optimize.release`");
+                this.options.optimize.release = !value;
+            },
+
+            cargoArgs: (cx, value) => {
+                cx.warn("The `cargoArgs` option has been changed to `extraArgs.cargo`");
+                this.options.extraArgs.cargo = value;
+            },
+
+            wasmBindgenArgs: (cx, value) => {
+                cx.warn("The `wasmBindgenArgs` option has been changed to `extraArgs.wasmBindgen`");
+                this.options.extraArgs.wasmBindgen = value;
+            },
+
+            wasmOptArgs: (cx, value) => {
+                cx.warn("The `wasmOptArgs` option has been changed to `extraArgs.wasmOpt`");
+                this.options.extraArgs.wasmOpt = value;
+            },
+
+            serverPath: (cx, value) => {
+                cx.warn("The `serverPath` option is deprecated and no longer works");
+            },
+
+            importHook: (cx, value) => {
+                cx.warn("The `importHook` option is deprecated and no longer works");
+            },
+
+            experimental: {
+                directExports: (cx, value) => {
+                    cx.warn("The `experimental.directExports` option is deprecated and no longer works");
+                },
+            },
+        };
 
         this.cache = {
             nightly: {},
@@ -39,6 +109,7 @@ class State {
             build: {},
         };
     }
+
 
     reset() {
         this.fileIds.clear();
@@ -49,90 +120,81 @@ class State {
         this.cache.build = {};
     }
 
-    setDefaults() {
-        if (this.options.watchPatterns == null) {
-            this.options.watchPatterns = [
-                "src/**"
-            ];
+
+    processOptions(cx) {
+        function copyDefaults(defaults) {
+            const options = {};
+
+            eachObject(defaults, (key, value) => {
+                if (isObject(value)) {
+                    options[key] = copyDefaults(value);
+
+                } else {
+                    options[key] = value;
+                }
+            });
+
+            return options;
         }
 
-        if (this.options.inlineWasm == null) {
-            this.options.inlineWasm = false;
-        }
+        if (!this.processed) {
+            this.processed = true;
 
-        if (this.options.verbose == null) {
-            this.options.verbose = false;
-        }
+            const oldOptions = this.options;
 
-        if (this.options.nodejs == null) {
-            this.options.nodejs = false;
-        }
+            // Make a copy of the default settings
+            this.options = copyDefaults(this.defaults);
 
-        if (this.options.optimize == null) {
-            this.options.optimize = {};
-        }
-
-        if (this.options.optimize.rustc == null) {
-            this.options.optimize.rustc = true;
-        }
-
-        if (this.options.extraArgs == null) {
-            this.options.extraArgs = {};
-        }
-
-        if (this.options.extraArgs.cargo == null) {
-            this.options.extraArgs.cargo = [];
-        }
-
-        if (this.options.extraArgs.wasmBindgen == null) {
-            this.options.extraArgs.wasmBindgen = [];
-        }
-
-        if (this.options.extraArgs.wasmOpt == null) {
-            // TODO figure out better optimization options ?
-            this.options.extraArgs.wasmOpt = ["-O"];
-        }
-
-        if (this.options.experimental == null) {
-            this.options.experimental = {};
-        }
-
-        if (this.options.experimental.synchronous == null) {
-            this.options.experimental.synchronous = false;
+            // Overwrite the default settings with the user-provided settings
+            this.setOptions(cx, [], oldOptions, this.options, this.defaults, this.deprecations);
         }
     }
 
-    checkDeprecations(cx) {
-        if (this.options.debug != null) {
-            cx.warn("The `debug` option has been changed to `optimize.release`");
-            this.options.optimize.release = !this.options.debug;
-        }
+    setOptions(cx, path, oldOptions, options, defaults, deprecations) {
+        if (oldOptions != null) {
+            if (isObject(oldOptions)) {
+                eachObject(oldOptions, (key, value) => {
+                    const newPath = path.concat([key]);
 
-        if (this.options.cargoArgs != null) {
-            cx.warn("The `cargoArgs` option has been changed to `extraArgs.cargo`");
-            this.options.extraArgs.cargo = this.options.cargoArgs;
-        }
+                    // If the option is deprecated, call the function
+                    if (deprecations != null && key in deprecations) {
+                        const deprecation = deprecations[key];
 
-        if (this.options.wasmBindgenArgs != null) {
-            cx.warn("The `wasmBindgenArgs` option has been changed to `extraArgs.wasmBindgen`");
-            this.options.extraArgs.wasmBindgen = this.options.wasmBindgenArgs;
-        }
+                        if (isObject(deprecation)) {
+                            this.setOptions(cx, newPath, value, options?.[key], defaults?.[key], deprecation);
 
-        if (this.options.wasmOptArgs != null) {
-            cx.warn("The `wasmOptArgs` option has been changed to `extraArgs.wasmOpt`");
-            this.options.extraArgs.wasmOpt = this.options.wasmOptArgs;
-        }
+                        } else {
+                            deprecation(cx, value);
+                        }
 
-        if (this.options.serverPath != null) {
-            cx.warn("The `serverPath` option is deprecated and no longer works");
-        }
+                    // If the option has a default, apply it
+                    } else if (defaults != null && key in defaults) {
+                        const def = defaults[key];
 
-        if (this.options.importHook != null) {
-            cx.warn("The `importHook` option is deprecated and no longer works");
-        }
+                        if (isObject(def)) {
+                            this.setOptions(cx, newPath, value, options?.[key], def, deprecations?.[key]);
 
-        if (this.options.experimental.directExports != null) {
-            cx.warn("The `experimental.directExports` option is deprecated and no longer works");
+                        } else if (value != null) {
+                            if (isObject(options)) {
+                                options[key] = value;
+
+                            } else {
+                                throw new Error("Invalid options state, please report this");
+                            }
+                        }
+
+                    // The option doesn't exist
+                    } else {
+                        throw new Error(`The \`${newPath.join(".")}\` option does not exist`);
+                    }
+                });
+
+            } else if (path.length > 0) {
+                throw new Error(`The \`${path.join(".")}\` option must be an object`);
+
+            } else {
+                throw new Error(`Options must be an object`);
+            }
         }
     }
 
@@ -594,8 +656,6 @@ export default function rust(options = {}) {
 
     const state = new State(options);
 
-    state.setDefaults();
-
     return {
         name: "rust",
 
@@ -613,7 +673,7 @@ export default function rust(options = {}) {
         buildStart(rollup) {
             state.reset();
 
-            state.checkDeprecations(this);
+            state.processOptions(this);
 
             state.watch = this.meta.watchMode || rollup.watch;
 

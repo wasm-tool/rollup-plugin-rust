@@ -42,6 +42,18 @@ export function info(s) {
 }
 
 
+export function isObject(value) {
+    return Object.prototype.toString.call(value) === "[object Object]";
+}
+
+
+export function eachObject(object, f) {
+    Object.keys(object).forEach((key) => {
+        f(key, object[key]);
+    });
+}
+
+
 export function glob(pattern, cwd) {
     return $glob.glob(pattern, {
         cwd: cwd,
