@@ -25,8 +25,13 @@ class State {
         // Whether we're in watch mode or not
         this.watch = false;
 
-        // Whether to optimize in release mode
-        this.release = true;
+        this.optimize = {
+            // Whether to optimize in release mode
+            release: true,
+
+            // Whether to run wasm-opt
+            wasmOpt: true,
+        };
 
         // Whether the options have been processed or not
         this.processed = false;
@@ -46,6 +51,8 @@ class State {
 
             optimize: {
                 release: null,
+
+                wasmOpt: null,
 
                 rustc: true,
             },
@@ -288,7 +295,7 @@ class State {
 
 
     async wasmOpt(cx, outDir) {
-        if (this.release) {
+        if (this.optimize.wasmOpt) {
             const result = await $wasmOpt.run({
                 dir: outDir,
                 input: "index_bg.wasm",
@@ -515,7 +522,7 @@ class State {
         const wasmPath = $path.resolve($path.join(
             targetDir,
             "wasm32-unknown-unknown",
-            (this.release ? "release" : "debug"),
+            (this.optimize.release ? "release" : "debug"),
             name + ".wasm"
         ));
 
@@ -541,7 +548,7 @@ class State {
             nightly,
             verbose: this.options.verbose,
             extraArgs: this.options.extraArgs.cargo,
-            release: this.release,
+            release: this.optimize.release,
             optimize: this.options.optimize.rustc,
         });
     }
@@ -677,9 +684,15 @@ export default function rust(options = {}) {
 
             state.watch = this.meta.watchMode || rollup.watch;
 
-            state.release = (state.options.optimize.release == null
-                ? !state.watch
-                : state.options.optimize.release);
+            state.optimize = {
+                release: (state.options.optimize.release == null
+                    ? !state.watch
+                    : state.options.optimize.release),
+
+                wasmOpt: (state.options.optimize.wasmOpt == null
+                    ? !state.watch
+                    : state.options.optimize.wasmOpt),
+            };
         },
 
         // This is only compatible with Rollup 2.78.0 and higher

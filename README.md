@@ -205,6 +205,11 @@ rust({
         // In watch mode this defaults to false.
         release: true,
 
+        // Whether to run wasm-opt.
+        //
+        // In watch mode this defaults to false.
+        wasmOpt: true,
+
         // Whether to use optimized rustc settings.
         //
         // This slows down compilation but significantly reduces the file size.
