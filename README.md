@@ -191,8 +191,11 @@ rust({
     verbose: false,
 
     extraArgs: {
-        // Extra arguments passed to `cargo rustc`.
+        // Extra arguments passed to `cargo`.
         cargo: [],
+
+        // Extra arguments passed to `rustc`, this is equivalent to `RUSTFLAGS`.
+        rustc: [],
 
         // Extra arguments passed to `wasm-bindgen`.
         wasmBindgen: [],

@@ -39,7 +39,7 @@ export async function getVersion(dir, name) {
 }
 
 
-export async function run({ dir, verbose, extraArgs, release, optimize, nightly, strip }) {
+export async function run({ dir, verbose, cargoArgs, rustcArgs, release, optimize, nightly, strip }) {
     const cargoBin = getEnv("CARGO_BIN", "cargo");
 
     let args = [
@@ -102,7 +102,7 @@ export async function run({ dir, verbose, extraArgs, release, optimize, nightly,
         }
     }
 
-    args = args.concat(extraArgs);
+    args = args.concat(cargoArgs);
 
     args.push("--");
 
@@ -123,6 +123,8 @@ export async function run({ dir, verbose, extraArgs, release, optimize, nightly,
     if (this.options.rustArgs) {
         args = args.concat(this.options.rustArgs);
     }*/
+
+    args = args.concat(rustcArgs);
 
     await GLOBAL_LOCK.withLock(async () => {
         if (verbose) {

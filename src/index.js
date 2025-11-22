@@ -82,6 +82,8 @@ class State {
             extraArgs: {
                 cargo: [],
 
+                rustc: [],
+
                 wasmBindgen: [],
 
                 // TODO figure out better optimization options ?
@@ -549,7 +551,8 @@ class State {
             dir,
             nightly,
             verbose: this.options.verbose.get(),
-            extraArgs: this.options.extraArgs.cargo.get(),
+            cargoArgs: this.options.extraArgs.cargo.get(),
+            rustcArgs: this.options.extraArgs.rustc.get(),
             release: this.options.optimize.release.getOr(!this.watch),
             optimize: this.options.optimize.rustc.get(),
             strip: this.options.optimize.strip,
