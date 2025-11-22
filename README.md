@@ -72,12 +72,14 @@ You can use nightly by creating a `rust-toolchain.toml` file in your project dir
 
 ```toml
 [toolchain]
-channel = "nightly-2025-01-16"
-components = [ "rust-std", "rust-src" ]
+channel = "nightly-2025-11-20"
+components = [ "rust-std", "rust-src", "rustfmt", "clippy" ]
 targets = [ "wasm32-unknown-unknown" ]
 ```
 
 You can change the `channel` to upgrade to the latest nightly version (or downgrade to a past nightly version).
+
+After changing the `rust-toolchain.toml` file, you might need to run `rustup show` in order to download the correct Rust version.
 
 
 ### Workspaces
