@@ -54,9 +54,16 @@ export async function run({ dir, verbose, extraArgs, release, optimize, nightly 
         args.push("--release");
 
         if (optimize) {
-            // Wasm doesn't support unwind
-            args.push("--config");
-            args.push("profile.release.panic=\"abort\"");
+            // Wasm doesn't support unwind, so we abort instead
+            if (nightly) {
+                // Reduces file size by removing panic strings
+                args.push("--config");
+                args.push("profile.release.panic=\"immediate-abort\"");
+
+            } else {
+                args.push("--config");
+                args.push("profile.release.panic=\"abort\"");
+            }
 
             // Improves runtime performance and file size
             args.push("--config");
@@ -72,8 +79,9 @@ export async function run({ dir, verbose, extraArgs, release, optimize, nightly 
 
             // Reduces file size by removing panic strings
             if (nightly) {
-                args.push("-Z", "build-std=panic_abort,std");
-                args.push("-Z", "build-std-features=panic_immediate_abort,optimize_for_size");
+                args.push("-Z", "panic-immediate-abort");
+                args.push("-Z", "build-std");
+                args.push("-Z", "build-std-features=optimize_for_size");
 
                 //args.push("--config");
                 //args.push(`build.rustflags=["-Z", "location-detail=none", "-Z", "fmt-debug=none"]`);

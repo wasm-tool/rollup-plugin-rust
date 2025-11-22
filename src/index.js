@@ -63,7 +63,7 @@ class State {
                 wasmBindgen: [],
 
                 // TODO figure out better optimization options ?
-                wasmOpt: ["-O"],
+                wasmOpt: ["-O", "--enable-threads", "--enable-bulk-memory", "--enable-bulk-memory-opt"],
             },
 
             experimental: {

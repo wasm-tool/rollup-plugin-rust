@@ -32,21 +32,21 @@
   ],
   "dependencies": {
     "@iarna/toml": "^2.2.5",
-    "@rollup/pluginutils": "^5.1.4",
-    "chalk": "^5.4.1",
-    "glob": "^11.0.1",
+    "@rollup/pluginutils": "^5.3.0",
+    "chalk": "^5.6.2",
+    "glob": "^13.0.0",
     "node-fetch": "^3.3.2",
-    "rimraf": "^6.0.1",
-    "tar": "^7.4.3"
+    "rimraf": "^6.1.2",
+    "tar": "^7.5.2"
   },
   "devDependencies": {
-    "@rollup/plugin-commonjs": "^28.0.2",
-    "@rollup/plugin-node-resolve": "^16.0.0",
-    "binaryen": "^121.0.0",
+    "@rollup/plugin-commonjs": "^29.0.0",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "binaryen": "^125.0.0",
     "live-server": "^1.2.2",
-    "rollup": "^4.30.1"
+    "rollup": "^4.53.3"
   },
   "peerDependencies": {
-    "binaryen": "^121.0.0"
+    "binaryen": "*"
   }
 }
