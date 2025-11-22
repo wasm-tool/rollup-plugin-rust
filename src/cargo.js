@@ -39,7 +39,7 @@ export async function getVersion(dir, name) {
 }
 
 
-export async function run({ dir, verbose, extraArgs, release, optimize, nightly }) {
+export async function run({ dir, verbose, extraArgs, release, optimize, nightly, strip }) {
     const cargoBin = getEnv("CARGO_BIN", "cargo");
 
     let args = [
@@ -82,9 +82,6 @@ export async function run({ dir, verbose, extraArgs, release, optimize, nightly 
                 args.push("-Z", "panic-immediate-abort");
                 args.push("-Z", "build-std");
                 args.push("-Z", "build-std-features=optimize_for_size");
-
-                //args.push("--config");
-                //args.push(`build.rustflags=["-Z", "location-detail=none", "-Z", "fmt-debug=none"]`);
             }
         }
 
@@ -107,9 +104,19 @@ export async function run({ dir, verbose, extraArgs, release, optimize, nightly 
 
     args = args.concat(extraArgs);
 
-    /*args.push("--");
+    args.push("--");
 
-    if (this.options.multithreading) {
+    if (nightly) {
+        if (strip.location.get()) {
+            args.push("-Z", "location-detail=none");
+        }
+
+        if (strip.formatDebug.get()) {
+            args.push("-Z", "fmt-debug=none");
+        }
+    }
+
+    /*if (this.options.multithreading) {
         args.push("-C", "target-feature=+atomics,+bulk-memory,+mutable-globals");
     }
 

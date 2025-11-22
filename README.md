@@ -196,7 +196,7 @@ rust({
         wasmBindgen: [],
 
         // Extra arguments passed to `wasm-opt`.
-        wasmOpt: ["-O"],
+        wasmOpt: ["-O", "--enable-threads", "--enable-bulk-memory", "--enable-bulk-memory-opt"],
     },
 
     optimize: {
@@ -216,6 +216,17 @@ rust({
         //
         // If you use the nightly toolchain, this will reduce the file size even more.
         rustc: true,
+
+        // These options default to false in watch mode.
+        strip: {
+            // Removes location information, resulting in lower file size but worse stace traces.
+            // Currently this only works on nightly.
+            location: true,
+
+            // Removes debug formatting from strings, such as `format!("{:?}", ...)`
+            // Currently this only works on nightly.
+            formatDebug: true,
+        },
     },
 
     // Which files it should watch in watch mode. This is relative to the Cargo.toml file.

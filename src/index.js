@@ -1,7 +1,7 @@
 import * as $path from "node:path";
 import * as $toml from "@iarna/toml";
 import { createFilter } from "@rollup/pluginutils";
-import { glob, rm, read, readString, debug, getEnv, isObject, eachObject } from "./utils.js";
+import { glob, rm, read, readString, debug, getEnv, isObject, eachObject, copyObject } from "./utils.js";
 import * as $wasmBindgen from "./wasm-bindgen.js";
 import * as $cargo from "./cargo.js";
 import * as $wasmOpt from "./wasm-opt.js";
@@ -17,28 +17,44 @@ function stripPath(path) {
 }
 
 
+class Option {
+    constructor(value) {
+        this.value = value;
+        this.isDefault = true;
+    }
+
+    get() {
+        return this.value;
+    }
+
+    getOr(fallback) {
+        if (this.isDefault) {
+            return fallback;
+
+        } else {
+            return this.value;
+        }
+    }
+
+    set(value) {
+        this.value = value;
+        this.isDefault = false;
+    }
+}
+
+
 class State {
-    constructor(options) {
+    constructor() {
         // Whether the plugin is running in Vite or not
         this.vite = false;
 
         // Whether we're in watch mode or not
         this.watch = false;
 
-        this.optimize = {
-            // Whether to optimize in release mode
-            release: true,
-
-            // Whether to run wasm-opt
-            wasmOpt: true,
-        };
-
         // Whether the options have been processed or not
         this.processed = false;
 
         this.fileIds = new Set();
-
-        this.options = options;
 
         this.defaults = {
             watchPatterns: ["src/**"],
@@ -50,11 +66,17 @@ class State {
             nodejs: false,
 
             optimize: {
-                release: null,
+                release: true,
 
-                wasmOpt: null,
+                wasmOpt: true,
 
                 rustc: true,
+
+                strip: {
+                    location: true,
+
+                    formatDebug: true,
+                },
             },
 
             extraArgs: {
@@ -73,25 +95,28 @@ class State {
             },
         };
 
+        // Make a copy of the default settings
+        this.options = copyObject(this.defaults, (value) => new Option(value));
+
         this.deprecations = {
             debug: (cx, value) => {
                 cx.warn("The `debug` option has been changed to `optimize.release`");
-                this.options.optimize.release = !value;
+                this.options.optimize.release.set(!value);
             },
 
             cargoArgs: (cx, value) => {
                 cx.warn("The `cargoArgs` option has been changed to `extraArgs.cargo`");
-                this.options.extraArgs.cargo = value;
+                this.options.extraArgs.cargo.set(value);
             },
 
             wasmBindgenArgs: (cx, value) => {
                 cx.warn("The `wasmBindgenArgs` option has been changed to `extraArgs.wasmBindgen`");
-                this.options.extraArgs.wasmBindgen = value;
+                this.options.extraArgs.wasmBindgen.set(value);
             },
 
             wasmOptArgs: (cx, value) => {
                 cx.warn("The `wasmOptArgs` option has been changed to `extraArgs.wasmOpt`");
-                this.options.extraArgs.wasmOpt = value;
+                this.options.extraArgs.wasmOpt.set(value);
             },
 
             serverPath: (cx, value) => {
@@ -128,29 +153,9 @@ class State {
     }
 
 
-    processOptions(cx) {
-        function copyDefaults(defaults) {
-            const options = {};
-
-            eachObject(defaults, (key, value) => {
-                if (isObject(value)) {
-                    options[key] = copyDefaults(value);
-
-                } else {
-                    options[key] = value;
-                }
-            });
-
-            return options;
-        }
-
+    processOptions(cx, oldOptions) {
         if (!this.processed) {
             this.processed = true;
-
-            const oldOptions = this.options;
-
-            // Make a copy of the default settings
-            this.options = copyDefaults(this.defaults);
 
             // Overwrite the default settings with the user-provided settings
             this.setOptions(cx, [], oldOptions, this.options, this.defaults, this.deprecations);
@@ -182,11 +187,8 @@ class State {
                             this.setOptions(cx, newPath, value, options?.[key], def, deprecations?.[key]);
 
                         } else if (value != null) {
-                            if (isObject(options)) {
-                                options[key] = value;
-
-                            } else {
-                                throw new Error("Invalid options state, please report this");
+                            if (options[key].isDefault) {
+                                options[key].set(value);
                             }
                         }
 
@@ -208,7 +210,7 @@ class State {
 
     async watchFiles(cx, dir) {
         if (this.watch) {
-            const matches = await Promise.all(this.options.watchPatterns.map((pattern) => glob(pattern, dir)));
+            const matches = await Promise.all(this.options.watchPatterns.get().map((pattern) => glob(pattern, dir)));
 
             // TODO deduplicate matches ?
             matches.forEach(function (files) {
@@ -249,7 +251,7 @@ class State {
             bin = this.cache.wasmBindgen[dir];
 
             if (bin == null) {
-                bin = this.cache.wasmBindgen[dir] = $wasmBindgen.download(dir, this.options.verbose);
+                bin = this.cache.wasmBindgen[dir] = $wasmBindgen.download(dir, this.options.verbose.get());
             }
 
             return await bin;
@@ -263,7 +265,7 @@ class State {
     async loadWasm(outDir) {
         const wasmPath = $path.join(outDir, "index_bg.wasm");
 
-        if (this.options.verbose) {
+        if (this.options.verbose.get()) {
             debug(`Looking for wasm at ${wasmPath}`);
         }
 
@@ -272,10 +274,10 @@ class State {
 
 
     async compileTypescript(name, outDir) {
-        if (this.options.experimental.typescriptDeclarationDir != null) {
+        if (this.options.experimental.typescriptDeclarationDir.get() != null) {
             await $typescript.write(
                 name,
-                this.options.experimental.typescriptDeclarationDir,
+                this.options.experimental.typescriptDeclarationDir.get(),
                 outDir,
             );
         }
@@ -283,25 +285,25 @@ class State {
 
 
     async compileTypescriptCustom(name, isCustom) {
-        if (isCustom && this.options.experimental.typescriptDeclarationDir != null) {
+        if (isCustom && this.options.experimental.typescriptDeclarationDir.get() != null) {
             await $typescript.writeCustom(
                 name,
-                this.options.experimental.typescriptDeclarationDir,
-                this.options.inlineWasm,
-                this.options.experimental.synchronous,
+                this.options.experimental.typescriptDeclarationDir.get(),
+                this.options.inlineWasm.get(),
+                this.options.experimental.synchronous.get(),
             );
         }
     }
 
 
     async wasmOpt(cx, outDir) {
-        if (this.optimize.wasmOpt) {
+        if (this.options.optimize.wasmOpt.getOr(!this.watch)) {
             const result = await $wasmOpt.run({
                 dir: outDir,
                 input: "index_bg.wasm",
                 output: "wasm_opt.wasm",
-                extraArgs: this.options.extraArgs.wasmOpt,
-                verbose: this.options.verbose,
+                extraArgs: this.options.extraArgs.wasmOpt.get(),
+                verbose: this.options.verbose.get(),
             });
 
             if (result !== null) {
@@ -356,7 +358,7 @@ class State {
         let mainCode;
         let sideEffects;
 
-        if (this.options.experimental.synchronous) {
+        if (this.options.experimental.synchronous.get()) {
             if (isCustom) {
                 sideEffects = false;
 
@@ -430,7 +432,7 @@ class State {
 
         let prelude;
 
-        if (this.options.nodejs) {
+        if (this.options.nodejs.get()) {
             prelude = `function loadFile(url) {
                 return new Promise((resolve, reject) => {
                     require("node:fs").readFile(url, (err, data) => {
@@ -454,7 +456,7 @@ class State {
         let mainCode;
         let sideEffects;
 
-        if (this.options.experimental.synchronous) {
+        if (this.options.experimental.synchronous.get()) {
             throw new Error("synchronous option can only be used with inlineWasm: true");
 
         } else {
@@ -498,7 +500,7 @@ class State {
 
 
     compileJs(build, isCustom) {
-        if (this.options.inlineWasm) {
+        if (this.options.inlineWasm.get()) {
             return this.compileJsInline(build, isCustom);
 
         } else {
@@ -522,13 +524,13 @@ class State {
         const wasmPath = $path.resolve($path.join(
             targetDir,
             "wasm32-unknown-unknown",
-            (this.optimize.release ? "release" : "debug"),
+            (this.options.optimize.release.getOr(!this.watch) ? "release" : "debug"),
             name + ".wasm"
         ));
 
         const outDir = $path.resolve($path.join(targetDir, "rollup-plugin-rust", name));
 
-        if (this.options.verbose) {
+        if (this.options.verbose.get()) {
             debug(`Using target directory ${targetDir}`);
             debug(`Using rustc output ${wasmPath}`);
             debug(`Using output directory ${outDir}`);
@@ -546,10 +548,11 @@ class State {
         await $cargo.run({
             dir,
             nightly,
-            verbose: this.options.verbose,
-            extraArgs: this.options.extraArgs.cargo,
-            release: this.optimize.release,
-            optimize: this.options.optimize.rustc,
+            verbose: this.options.verbose.get(),
+            extraArgs: this.options.extraArgs.cargo.get(),
+            release: this.options.optimize.release.getOr(!this.watch),
+            optimize: this.options.optimize.rustc.get(),
+            strip: this.options.optimize.strip,
         });
     }
 
@@ -560,9 +563,9 @@ class State {
             dir,
             wasmPath,
             outDir,
-            typescript: this.options.experimental.typescriptDeclarationDir != null,
-            extraArgs: this.options.extraArgs.wasmBindgen,
-            verbose: this.options.verbose,
+            typescript: this.options.experimental.typescriptDeclarationDir.get() != null,
+            extraArgs: this.options.extraArgs.wasmBindgen.get(),
+            verbose: this.options.verbose.get(),
         });
 
         const [wasm] = await Promise.all([
@@ -575,7 +578,7 @@ class State {
 
         let fileId;
 
-        if (!this.options.inlineWasm) {
+        if (!this.options.inlineWasm.get()) {
             fileId = cx.emitFile({
                 type: "asset",
                 source: wasm,
@@ -598,7 +601,7 @@ class State {
 
     async build(cx, dir, id) {
         try {
-            if (this.options.verbose) {
+            if (this.options.verbose.get()) {
                 debug(`Compiling ${id}`);
             }
 
@@ -611,7 +614,7 @@ class State {
             return await this.buildWasm(cx, dir, bin, name, wasmPath, outDir);
 
         } catch (e) {
-            if (this.options.verbose) {
+            if (this.options.verbose.get()) {
                 throw e;
 
             } else {
@@ -661,7 +664,7 @@ export default function rust(options = {}) {
     // TODO should the filter affect the Rust compilation ?
     const filter = createFilter(options.include, options.exclude);
 
-    const state = new State(options);
+    const state = new State();
 
     return {
         name: "rust",
@@ -673,26 +676,16 @@ export default function rust(options = {}) {
             if (config.command !== "build") {
                 // We have to force inlineWasm during dev because Vite doesn't support emitFile
                 // https://github.com/vitejs/vite/issues/7029
-                state.options.inlineWasm = true;
+                state.options.inlineWasm.set(true);
             }
         },
 
         buildStart(rollup) {
             state.reset();
 
-            state.processOptions(this);
+            state.processOptions(this, options);
 
             state.watch = this.meta.watchMode || rollup.watch;
-
-            state.optimize = {
-                release: (state.options.optimize.release == null
-                    ? !state.watch
-                    : state.options.optimize.release),
-
-                wasmOpt: (state.options.optimize.wasmOpt == null
-                    ? !state.watch
-                    : state.options.optimize.wasmOpt),
-            };
         },
 
         // This is only compatible with Rollup 2.78.0 and higher
@@ -779,7 +772,7 @@ export default function rust(options = {}) {
                         }
 
                     } else {
-                        if (options.verbose) {
+                        if (state.options.verbose.get()) {
                             debug(`Loading file ${meta.realPath}`);
                         }
 

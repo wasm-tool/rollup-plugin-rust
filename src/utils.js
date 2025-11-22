@@ -54,6 +54,22 @@ export function eachObject(object, f) {
 }
 
 
+export function copyObject(object, f) {
+    const output = {};
+
+    eachObject(object, (key, value) => {
+        if (isObject(value)) {
+            output[key] = copyObject(value, f);
+
+        } else {
+            output[key] = f(value);
+        }
+    });
+
+    return output;
+}
+
+
 export function glob(pattern, cwd) {
     return $glob.glob(pattern, {
         cwd: cwd,
