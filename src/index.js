@@ -794,7 +794,7 @@ export default function rust(options = {}) {
 
         resolveFileUrl(info) {
             if (state.fileIds.has(info.referenceId)) {
-                return `new URL(${JSON.stringify(info.fileName)}, import.meta.url)`;
+                return `new URL(${JSON.stringify(info.relativePath)}, import.meta.url)`;
 
             } else {
                 return null;
