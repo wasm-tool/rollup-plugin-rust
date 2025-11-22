@@ -2,7 +2,7 @@
   "name": "@wasm-tool/rollup-plugin-rust",
   "author": "Pauan <pauanyu+github@pm.me>",
   "description": "Rollup plugin for bundling and importing Rust crates.",
-  "version": "3.0.5",
+  "version": "3.1.0",
   "license": "MIT",
   "repository": "github:wasm-tool/rollup-plugin-rust",
   "homepage": "https://github.com/wasm-tool/rollup-plugin-rust#readme",
