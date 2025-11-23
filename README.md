@@ -240,6 +240,10 @@ rust({
 
     // These options should not be relied upon, they can change or disappear in future versions.
     experimental: {
+        // Compiles with atomics and enables multi-threading.
+        // Currently this only works on nightly.
+        atomics: false,
+
         // Whether the Wasm will be initialized synchronously or not.
         //
         // In the browser you can only use synchronous loading inside of Workers.

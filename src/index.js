@@ -91,6 +91,8 @@ class State {
             },
 
             experimental: {
+                atomics: false,
+
                 synchronous: false,
 
                 typescriptDeclarationDir: null,
@@ -556,6 +558,7 @@ class State {
             release: this.options.optimize.release.getOr(!this.watch),
             optimize: this.options.optimize.rustc.get(),
             strip: this.options.optimize.strip,
+            atomics: this.options.experimental.atomics.get(),
         });
     }
 
@@ -608,10 +611,11 @@ class State {
                 debug(`Compiling ${id}`);
             }
 
+            await this.buildCargo(dir);
+
             const [bin, { name, wasmPath, outDir }] = await Promise.all([
                 this.getWasmBindgen(dir),
                 this.getInfo(dir, id),
-                this.buildCargo(dir),
             ]);
 
             return await this.buildWasm(cx, dir, bin, name, wasmPath, outDir);

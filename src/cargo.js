@@ -39,7 +39,7 @@ export async function getVersion(dir, name) {
 }
 
 
-export async function run({ dir, verbose, cargoArgs, rustcArgs, release, optimize, nightly, strip }) {
+export async function run({ dir, verbose, cargoArgs, rustcArgs, release, optimize, nightly, atomics, strip }) {
     const cargoBin = getEnv("CARGO_BIN", "cargo");
 
     let args = [
@@ -49,9 +49,36 @@ export async function run({ dir, verbose, cargoArgs, rustcArgs, release, optimiz
         "--crate-type", "cdylib", // Needed for wasm-bindgen to work
     ];
 
+    let rustflags = [];
+
+    if (atomics) {
+        rustflags.push(
+            "-C", "target-feature=+atomics,+bulk-memory,+mutable-globals",
+            "-C", "link-args=--shared-memory",
+            "-C", "link-args=--import-memory",
+
+            "-C", "link-args=--export=__wasm_init_tls",
+            "-C", "link-args=--export=__tls_size",
+            "-C", "link-args=--export=__tls_align",
+            "-C", "link-args=--export=__tls_base",
+        );
+
+        args.push("-Z", "build-std");
+    }
+
     // https://doc.rust-lang.org/cargo/reference/profiles.html#release
     if (release) {
         args.push("--release");
+
+        if (nightly) {
+            if (strip.location.get()) {
+                rustflags.push("-Z", "location-detail=none");
+            }
+
+            if (strip.formatDebug.get()) {
+                rustflags.push("-Z", "fmt-debug=none");
+            }
+        }
 
         if (optimize) {
             // Wasm doesn't support unwind, so we abort instead
@@ -102,29 +129,13 @@ export async function run({ dir, verbose, cargoArgs, rustcArgs, release, optimiz
         }
     }
 
+    rustflags = rustflags.concat(rustcArgs);
+
+    if (rustflags.length > 0) {
+        args.push("--config", "build.rustflags=" + JSON.stringify(rustflags));
+    }
+
     args = args.concat(cargoArgs);
-
-    args.push("--");
-
-    if (nightly) {
-        if (strip.location.get()) {
-            args.push("-Z", "location-detail=none");
-        }
-
-        if (strip.formatDebug.get()) {
-            args.push("-Z", "fmt-debug=none");
-        }
-    }
-
-    /*if (this.options.multithreading) {
-        args.push("-C", "target-feature=+atomics,+bulk-memory,+mutable-globals");
-    }
-
-    if (this.options.rustArgs) {
-        args = args.concat(this.options.rustArgs);
-    }*/
-
-    args = args.concat(rustcArgs);
 
     await GLOBAL_LOCK.withLock(async () => {
         if (verbose) {
