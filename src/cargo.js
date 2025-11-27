@@ -4,13 +4,53 @@ import { getEnv, exec, debug, spawn, Lock } from "./utils.js";
 const GLOBAL_LOCK = new Lock();
 
 
+export class Nightly {
+    constructor(year, month, day) {
+        this.year = year;
+        this.month = month;
+        this.day = day;
+    }
+
+    greaterThan(other) {
+        if (this.year > other.year) {
+            return true;
+
+        } else if (this.year === other.year) {
+            if (this.month > other.month) {
+                return true;
+
+            } else if (this.month === other.month) {
+                return this.day > other.day;
+
+            } else {
+                return false;
+            }
+
+        } else {
+            return false;
+        }
+    }
+
+    supportsImmediateAbort() {
+        return this.greaterThan(new Nightly(2025, 10, 4));
+    }
+}
+
+
 export async function getNightly(dir) {
     const bin = getEnv("CARGO_BIN", "cargo");
 
     // TODO make this faster somehow ?
     const version = await exec(`${bin} --version`, { cwd: dir });
 
-    return /\-nightly /.test(version);
+    const a = /-nightly \([^ ]+ ([0-9]+)\-([0-9]+)\-([0-9]+)\)/.exec(version);
+
+    if (a) {
+        return new Nightly(+a[1], +a[2], +a[3]);
+
+    } else {
+        return null;
+    }
 }
 
 
@@ -63,7 +103,7 @@ export async function run({ dir, verbose, cargoArgs, rustcArgs, release, optimiz
             "-C", "link-args=--export=__tls_base",
         );
 
-        args.push("-Z", "build-std");
+        args.push("-Z", "build-std=panic_abort,core,std,alloc,proc_macro");
     }
 
     // https://doc.rust-lang.org/cargo/reference/profiles.html#release
@@ -82,7 +122,7 @@ export async function run({ dir, verbose, cargoArgs, rustcArgs, release, optimiz
 
         if (optimize) {
             // Wasm doesn't support unwind, so we abort instead
-            if (nightly) {
+            if (nightly && nightly.supportsImmediateAbort()) {
                 // Reduces file size by removing panic strings
                 args.push("--config");
                 args.push("profile.release.panic=\"immediate-abort\"");
@@ -106,8 +146,11 @@ export async function run({ dir, verbose, cargoArgs, rustcArgs, release, optimiz
 
             // Reduces file size by removing panic strings
             if (nightly) {
-                args.push("-Z", "panic-immediate-abort");
-                args.push("-Z", "build-std");
+                if (nightly.supportsImmediateAbort()) {
+                    args.push("-Z", "panic-immediate-abort");
+                }
+
+                args.push("-Z", "build-std=panic_abort,core,std,alloc,proc_macro");
                 args.push("-Z", "build-std-features=optimize_for_size");
             }
         }
