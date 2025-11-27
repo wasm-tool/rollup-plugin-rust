@@ -43,7 +43,7 @@ export async function getNightly(dir) {
     // TODO make this faster somehow ?
     const version = await exec(`${bin} --version`, { cwd: dir });
 
-    const a = /-nightly \([^ ]+ ([0-9]+)\-([0-9]+)\-([0-9]+)\)/.exec(version);
+    const a = /\-nightly \([^ ]+ ([0-9]+)\-([0-9]+)\-([0-9]+)\)/.exec(version);
 
     if (a) {
         return new Nightly(+a[1], +a[2], +a[3]);
