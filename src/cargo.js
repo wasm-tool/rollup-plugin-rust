@@ -185,6 +185,18 @@ export async function run({ dir, verbose, cargoArgs, rustcArgs, release, optimiz
             debug(`Running cargo ${args.join(" ")}`);
         }
 
-        await spawn(cargoBin, args, { cwd: dir, stdio: "inherit" });
+        try {
+            await spawn(cargoBin, args, { cwd: dir, stdio: "inherit" });
+
+        } catch (e) {
+            if (verbose) {
+                throw e;
+
+            } else {
+                const e = new Error("Rust compilation failed");
+                e.stack = null;
+                throw e;
+            }
+        }
     });
 }

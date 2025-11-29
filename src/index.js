@@ -606,61 +606,58 @@ class State {
 
 
     async build(cx, dir, id) {
-        try {
-            if (this.options.verbose.get()) {
-                debug(`Compiling ${id}`);
-            }
-
-            await this.buildCargo(dir);
-
-            const [bin, { name, wasmPath, outDir }] = await Promise.all([
-                this.getWasmBindgen(dir),
-                this.getInfo(dir, id),
-            ]);
-
-            return await this.buildWasm(cx, dir, bin, name, wasmPath, outDir);
-
-        } catch (e) {
-            if (this.options.verbose.get()) {
-                throw e;
-
-            } else {
-                const e = new Error("Rust compilation failed");
-                e.stack = null;
-                throw e;
-            }
+        if (this.options.verbose.get()) {
+            debug(`Compiling ${id}`);
         }
+
+        await this.buildCargo(dir);
+
+        const [bin, { name, wasmPath, outDir }] = await Promise.all([
+            this.getWasmBindgen(dir),
+            this.getInfo(dir, id),
+        ]);
+
+        return await this.buildWasm(cx, dir, bin, name, wasmPath, outDir);
     }
 
 
     async load(cx, oldId) {
-        const id = stripPath(oldId);
+        try {
+            const id = stripPath(oldId);
 
-        let promise = this.cache.build[id];
+            let promise = this.cache.build[id];
 
-        if (promise == null) {
-            const dir = $path.dirname(id);
+            if (promise == null) {
+                const dir = $path.dirname(id);
 
-            promise = this.cache.build[id] = Promise.all([
-                this.build(cx, dir, id),
-                this.watchFiles(cx, dir),
-            ]);
-        }
+                promise = this.cache.build[id] = Promise.all([
+                    this.build(cx, dir, id),
+                    this.watchFiles(cx, dir),
+                ]);
+            }
 
-        const [build] = await promise;
+            const [build] = await promise;
 
-        if (oldId.endsWith("?inline")) {
-            return this.compileInlineWasm(build);
+            if (oldId.endsWith("?inline")) {
+                return this.compileInlineWasm(build);
 
-        } else {
-            const isCustom = oldId.endsWith("?custom");
+            } else {
+                const isCustom = oldId.endsWith("?custom");
 
-            const [result] = await Promise.all([
-                this.compileJs(build, isCustom),
-                this.compileTypescriptCustom(build.name, isCustom),
-            ]);
+                const [result] = await Promise.all([
+                    this.compileJs(build, isCustom),
+                    this.compileTypescriptCustom(build.name, isCustom),
+                ]);
 
-            return result;
+                return result;
+            }
+
+        } catch (e) {
+            if (!this.options.verbose.get()) {
+                e.stack = null;
+            }
+
+            throw e;
         }
     }
 }
